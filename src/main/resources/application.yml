@@ -1,22 +1,14 @@
 spring:
   datasource:
-    url: ${DATABASE_URL}
-    username: ${DATABASE_USERNAME}
-    password: ${DATABASE_PASSWORD}
+    # Usando os nomes exatos que aparecem no seu print do Railway
+    url: jdbc:mysql://${RAILWAY_PRIVATE_DOMAIN}:3306/${MYSQL_DATABASE}?createDatabaseIfNotExist=true&serverTimezone=UTC
+    username: root
+    password: ${MYSQL_ROOT_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
-
+  
   jpa:
-    open-in-view: false
     hibernate:
       ddl-auto: update
-    show-sql: false
     properties:
       hibernate:
-        format_sql: false
-
-server:
-  port: ${PORT:8080}
-
-jwt:
-  secret: ${JWT_SECRET:3f8a2b1c9d4e7f6a0b5c8d2e1f4a7b3c9d6e0f2a5b8c1d4e7f0a3b6c9d2e5f8}
-  expiration: ${JWT_EXPIRATION:86400000}
+        dialect: org.hibernate.dialect.MySQL8Dialect
