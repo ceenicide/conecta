@@ -1,22 +1,24 @@
 spring:
   datasource:
-    url: ${DATABASE_URL}
-    username: ${DATABASE_USERNAME}
-    password: ${DATABASE_PASSWORD}
+    # Lê a URL do Railway. Se não achar, usa o link direto como fallback.
+    url: ${DATABASE_URL:jdbc:mysql://mysql-o4pn.railway.internal:3306/railway}
+    username: ${DATABASE_USERNAME:root}
+    password: ${DATABASE_PASSWORD:obNlpzpoYUiXECXjqooAimOWBJOYwbal}
     driver-class-name: com.mysql.cj.jdbc.Driver
   
   jpa:
     hibernate:
       ddl-auto: update
     show-sql: false
-    database-platform: org.hibernate.dialect.MySQLDialect
     properties:
       hibernate:
         dialect: org.hibernate.dialect.MySQLDialect
+    database-platform: org.hibernate.dialect.MySQLDialect
 
 jwt:
-  secret: ${JWT_SECRET}
-  expiration: ${JWT_EXPIRATION}
+  # Removemos o prefixo "secret:" e as aspas para evitar erro de parse
+  secret: ${JWT_SECRET:3f8a2b1c9d4e7f6a0b5c8d2e1f4a7b3c9d6e0f2a5b8c1d4e7f0a3b6c9d2e5f8}
+  expiration: ${JWT_EXPIRATION:86400000}
 
 server:
   port: ${PORT:8080}
