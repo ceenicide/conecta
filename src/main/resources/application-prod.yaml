@@ -1,6 +1,5 @@
 spring:
   datasource:
-    # Ele vai ler o link jdbc que criamos acima
     url: ${DATABASE_URL}
     username: ${DATABASE_USERNAME}
     password: ${DATABASE_PASSWORD}
@@ -10,7 +9,6 @@ spring:
     hibernate:
       ddl-auto: update
     show-sql: false
-    # Garante que o Hibernate entenda que é um MySQL 8+
     database-platform: org.hibernate.dialect.MySQLDialect
     properties:
       hibernate:
