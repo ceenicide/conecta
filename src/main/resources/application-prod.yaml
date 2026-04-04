@@ -1,9 +1,8 @@
 spring:
   datasource:
-    # Lê a URL do Railway. Se não achar, usa o link direto como fallback.
-    url: ${DATABASE_URL:jdbc:mysql://mysql-o4pn.railway.internal:3306/railway}
-    username: ${DATABASE_USERNAME:root}
-    password: ${DATABASE_PASSWORD:obNlpzpoYUiXECXjqooAimOWBJOYwbal}
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USERNAME}
+    password: ${DATABASE_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
   
   jpa:
