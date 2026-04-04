@@ -1,13 +1,14 @@
 spring:
   datasource:
-    # Usando a variável que já tem todos os parâmetros que o Railway gerou
     url: ${DATABASE_URL}
     username: ${DATABASE_USERNAME}
     password: ${DATABASE_PASSWORD}
-    driver-class-name: com.mysql.cj.jdbc.Driver
-  
   jpa:
     hibernate:
       ddl-auto: update
     show-sql: false
-    
+
+# Na produção, ele vai buscar essas variáveis que você vai criar no painel do Railway
+jwt:
+  secret: ${JWT_SECRET}
+  expiration: ${JWT_EXPIRATION}
