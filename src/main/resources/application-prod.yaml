@@ -1,6 +1,6 @@
 spring:
   datasource:
-    # O Spring vai buscar o link completo do banco aqui
+    # Ele vai ler o link jdbc que criamos acima
     url: ${DATABASE_URL}
     username: ${DATABASE_USERNAME}
     password: ${DATABASE_PASSWORD}
@@ -8,20 +8,17 @@ spring:
   
   jpa:
     hibernate:
-      # Cria as tabelas automaticamente no Railway
       ddl-auto: update
     show-sql: false
+    # Garante que o Hibernate entenda que é um MySQL 8+
+    database-platform: org.hibernate.dialect.MySQLDialect
     properties:
       hibernate:
         dialect: org.hibernate.dialect.MySQLDialect
-    # Garante que o Hibernate use a plataforma MySQL
-    database-platform: org.hibernate.dialect.MySQLDialect
 
-# Configurações de Segurança
 jwt:
   secret: ${JWT_SECRET}
   expiration: ${JWT_EXPIRATION}
 
-# Configuração de porta para o Railway encontrar seu App
 server:
   port: ${PORT:8080}
