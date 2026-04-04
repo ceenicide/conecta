@@ -1,14 +1,27 @@
 spring:
   datasource:
-    # Montamos a URL do jeito que o Java gosta, usando as peças do Railway
-    url: jdbc:mysql://${MYSQLHOST}:${MYSQLPORT}/${MYSQLDATABASE}
-    username: ${MYSQLUSER}
-    password: ${MYSQLPASSWORD}
+    # O Spring vai buscar o link completo do banco aqui
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USERNAME}
+    password: ${DATABASE_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
+  
   jpa:
     hibernate:
+      # Cria as tabelas automaticamente no Railway
       ddl-auto: update
     show-sql: false
     properties:
       hibernate:
         dialect: org.hibernate.dialect.MySQLDialect
+    # Garante que o Hibernate use a plataforma MySQL
+    database-platform: org.hibernate.dialect.MySQLDialect
+
+# Configurações de Segurança
+jwt:
+  secret: ${JWT_SECRET}
+  expiration: ${JWT_EXPIRATION}
+
+# Configuração de porta para o Railway encontrar seu App
+server:
+  port: ${PORT:8080}
