@@ -19,6 +19,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.feira.conecta.config.SecurityUtils;
 import com.feira.conecta.domain.Anuncio;
 import com.feira.conecta.domain.Produto;
 import com.feira.conecta.domain.StatusAnuncio;
@@ -28,33 +29,32 @@ import com.feira.conecta.dto.AnuncioDTO;
 import com.feira.conecta.exception.ResourceNotFoundException;
 import com.feira.conecta.repository.AnuncioRepository;
 import com.feira.conecta.repository.ProdutoRepository;
-import com.feira.conecta.repository.UsuarioRepository;
 
 @ExtendWith(MockitoExtension.class)
 class AnuncioServiceTest {
 
     @Mock private AnuncioRepository anuncioRepository;
-    @Mock private UsuarioRepository usuarioRepository;
     @Mock private ProdutoRepository produtoRepository;
+    @Mock private SecurityUtils securityUtils;
 
     @InjectMocks
     private AnuncioService service;
 
     private Usuario vendedor;
     private Usuario comprador;
-private Produto produto;
-private Anuncio anuncio;
-private AnuncioDTO dto;
+    private Produto produto;
+    private Anuncio anuncio;
+    private AnuncioDTO dto;
 
-@BeforeEach
-void setup() {
+    @BeforeEach
+    void setup() {
         vendedor = Usuario.builder()
                 .id(1L).nome("Maria").telefone("11999990000")
-                .tipo(TipoUsuario.VENDEDOR).build();
+                .senha("hash").tipo(TipoUsuario.VENDEDOR).build();
 
         comprador = Usuario.builder()
                 .id(2L).nome("Carlos").telefone("11888880000")
-                .tipo(TipoUsuario.COMPRADOR).build();
+                .senha("hash").tipo(TipoUsuario.COMPRADOR).build();
 
         produto = Produto.builder()
                 .id(1L).nome("Soja").descricao("Safra 2025").build();
@@ -66,18 +66,17 @@ void setup() {
                 .status(StatusAnuncio.ATIVO)
                 .build();
 
+        // dto de entrada: sem usuarioId (vem do token)
         dto = AnuncioDTO.builder()
-                .usuarioId(1L).produtoId(1L)
+                .produtoId(1L)
                 .quantidade(new BigDecimal("100"))
                 .preco(new BigDecimal("50.00"))
                 .build();
-}
+    }
 
-    // CENÁRIOS FELIZES
-
-@Test
-void deveCriarAnuncioComSucesso() {
-        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(vendedor));
+    @Test
+    void deveCriarAnuncioComSucesso() {
+        when(securityUtils.getUsuarioLogado()).thenReturn(vendedor);
         when(produtoRepository.findById(1L)).thenReturn(Optional.of(produto));
         when(anuncioRepository.save(any())).thenReturn(anuncio);
 
@@ -87,12 +86,11 @@ void deveCriarAnuncioComSucesso() {
         assertThat(resultado.getUsuarioNome()).isEqualTo("Maria");
         assertThat(resultado.getProdutoNome()).isEqualTo("Soja");
         verify(anuncioRepository, times(1)).save(any());
-}
+    }
 
-@Test
-void deveListarAnunciosAtivos() {
-        when(anuncioRepository.findByStatus(StatusAnuncio.ATIVO))
-                .thenReturn(List.of(anuncio));
+    @Test
+    void deveListarAnunciosAtivos() {
+        when(anuncioRepository.findByStatus(StatusAnuncio.ATIVO)).thenReturn(List.of(anuncio));
 
         List<AnuncioDTO> resultado = service.listarAtivos();
 
@@ -111,13 +109,24 @@ void deveListarAnunciosAtivos() {
     }
 
     @Test
+    void deveListarMeusAnuncios() {
+        when(securityUtils.getUsuarioLogado()).thenReturn(vendedor);
+        when(anuncioRepository.findByUsuarioId(1L)).thenReturn(List.of(anuncio));
+
+        List<AnuncioDTO> resultado = service.listarMeusAnuncios();
+
+        assertThat(resultado).hasSize(1);
+        assertThat(resultado.get(0).getUsuarioId()).isEqualTo(1L);
+    }
+
+    @Test
     void deveMarcarAnuncioComoVendido() {
         Anuncio vendido = Anuncio.builder()
                 .id(1L).usuario(vendedor).produto(produto)
-                .quantidade(new BigDecimal("100"))
-                .preco(new BigDecimal("50.00"))
+                .quantidade(new BigDecimal("100")).preco(new BigDecimal("50.00"))
                 .status(StatusAnuncio.VENDIDO).build();
 
+        when(securityUtils.getUsuarioLogado()).thenReturn(vendedor);
         when(anuncioRepository.findById(1L)).thenReturn(Optional.of(anuncio));
         when(anuncioRepository.save(any())).thenReturn(vendido);
 
@@ -128,7 +137,8 @@ void deveListarAnunciosAtivos() {
 
     @Test
     void deveDeletarAnuncioComSucesso() {
-        when(anuncioRepository.existsById(1L)).thenReturn(true);
+        when(securityUtils.getUsuarioLogado()).thenReturn(vendedor);
+        when(anuncioRepository.findById(1L)).thenReturn(Optional.of(anuncio));
         doNothing().when(anuncioRepository).deleteById(1L);
 
         assertThatCode(() -> service.deletar(1L)).doesNotThrowAnyException();
@@ -136,69 +146,53 @@ void deveListarAnunciosAtivos() {
     }
 
     @Test
-    void deveListarAnunciosPorUsuario() {
-        when(usuarioRepository.existsById(1L)).thenReturn(true);
-        when(anuncioRepository.findByUsuarioId(1L)).thenReturn(List.of(anuncio));
-
-        List<AnuncioDTO> resultado = service.listarPorUsuario(1L);
-
-        assertThat(resultado).hasSize(1);
-        assertThat(resultado.get(0).getUsuarioId()).isEqualTo(1L);
-    }
-
-    // CENÁRIOS INFELIZES
-
-    @Test
     void deveLancarExcecaoQuandoCompradorTentaCriarAnuncio() {
-        when(usuarioRepository.findById(2L)).thenReturn(Optional.of(comprador));
+        when(securityUtils.getUsuarioLogado()).thenReturn(comprador);
 
-        AnuncioDTO dtoComprador = AnuncioDTO.builder()
-                .usuarioId(2L).produtoId(1L)
-                .quantidade(new BigDecimal("10"))
-                .preco(new BigDecimal("20")).build();
-
-        assertThatThrownBy(() -> service.criar(dtoComprador))
+        assertThatThrownBy(() -> service.criar(dto))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Apenas vendedores podem criar anúncios");
     }
 
     @Test
-    void deveLancarExcecaoQuandoUsuarioNaoExiste() {
-        when(usuarioRepository.findById(99L)).thenReturn(Optional.empty());
-
-        AnuncioDTO dtoInvalido = AnuncioDTO.builder()
-                .usuarioId(99L).produtoId(1L)
-                .quantidade(new BigDecimal("10"))
-                .preco(new BigDecimal("20")).build();
-
-        assertThatThrownBy(() -> service.criar(dtoInvalido))
-                .isInstanceOf(ResourceNotFoundException.class)
-                .hasMessage("Usuário não encontrado com id: 99");
-    }
-
-    @Test
     void deveLancarExcecaoQuandoProdutoNaoExiste() {
-        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(vendedor));
-        when(produtoRepository.findById(99L)).thenReturn(Optional.empty());
+        when(securityUtils.getUsuarioLogado()).thenReturn(vendedor);
+        when(produtoRepository.findById(1L)).thenReturn(Optional.empty());
 
-        AnuncioDTO dtoInvalido = AnuncioDTO.builder()
-                .usuarioId(1L).produtoId(99L)
-                .quantidade(new BigDecimal("10"))
-                .preco(new BigDecimal("20")).build();
-
-        assertThatThrownBy(() -> service.criar(dtoInvalido))
+        assertThatThrownBy(() -> service.criar(dto))
                 .isInstanceOf(ResourceNotFoundException.class)
-                .hasMessage("Produto não encontrado com id: 99");
+                .hasMessage("Produto não encontrado com id: 1");
     }
 
     @Test
     void deveLancarExcecaoAoMarcarAnuncioJaVendido() {
         anuncio.setStatus(StatusAnuncio.VENDIDO);
+        when(securityUtils.getUsuarioLogado()).thenReturn(vendedor);
         when(anuncioRepository.findById(1L)).thenReturn(Optional.of(anuncio));
 
         assertThatThrownBy(() -> service.marcarComoVendido(1L))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Anúncio já está marcado como vendido");
+    }
+
+    @Test
+    void deveLancarExcecaoAoMarcarAnuncioDeOutroVendedor() {
+        when(securityUtils.getUsuarioLogado()).thenReturn(comprador);
+        when(anuncioRepository.findById(1L)).thenReturn(Optional.of(anuncio));
+
+        assertThatThrownBy(() -> service.marcarComoVendido(1L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Você não tem permissão para alterar este anúncio");
+    }
+
+    @Test
+    void deveLancarExcecaoAoDeletarAnuncioDeOutroVendedor() {
+        when(securityUtils.getUsuarioLogado()).thenReturn(comprador);
+        when(anuncioRepository.findById(1L)).thenReturn(Optional.of(anuncio));
+
+        assertThatThrownBy(() -> service.deletar(1L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Você não tem permissão para deletar este anúncio");
     }
 
     @Test
@@ -211,40 +205,9 @@ void deveListarAnunciosAtivos() {
     }
 
     @Test
-    void deveLancarExcecaoAoDeletarAnuncioInexistente() {
-        when(anuncioRepository.existsById(99L)).thenReturn(false);
+    void deveRetornarListaVaziaQuandoNaoHouverAnunciosAtivos() {
+        when(anuncioRepository.findByStatus(StatusAnuncio.ATIVO)).thenReturn(List.of());
 
-        assertThatThrownBy(() -> service.deletar(99L))
-                .isInstanceOf(ResourceNotFoundException.class)
-                .hasMessage("Anúncio não encontrado com id: 99");
+        assertThat(service.listarAtivos()).isEmpty();
     }
-
-    @Test
-    void deveLancarExcecaoAoListarAnunciosDeUsuarioInexistente() {
-        when(usuarioRepository.existsById(99L)).thenReturn(false);
-
-        assertThatThrownBy(() -> service.listarPorUsuario(99L))
-                .isInstanceOf(ResourceNotFoundException.class)
-                .hasMessage("Usuário não encontrado com id: 99");
-    }
-
-    @Test
-void deveRetornarListaVaziaQuandoNaoHouverAnunciosAtivos() {
-    when(anuncioRepository.findByStatus(StatusAnuncio.ATIVO))
-            .thenReturn(List.of());
-
-    List<AnuncioDTO> resultado = service.listarAtivos();
-
-    assertThat(resultado).isEmpty();
-}
-
-@Test
-void deveRetornarListaVaziaQuandoUsuarioNaoTiverAnuncios() {
-    when(usuarioRepository.existsById(1L)).thenReturn(true);
-    when(anuncioRepository.findByUsuarioId(1L)).thenReturn(List.of());
-
-    List<AnuncioDTO> resultado = service.listarPorUsuario(1L);
-
-    assertThat(resultado).isEmpty();
-}
 }

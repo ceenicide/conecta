@@ -13,25 +13,19 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class PedidoDTO {
 
     private Long id;
 
-    @NotNull(message = "Comprador é obrigatório")
+    // Preenchido internamente pelo token — ignorado na entrada
     private Long compradorId;
-
-    @NotNull(message = "Anúncio é obrigatório")
-    private Long anuncioId;
-
-    // campos de leitura — retornados na resposta
     private String compradorNome;
     private String produtoNome;
     private String vendedorNome;
+
+    @NotNull(message = "Anúncio é obrigatório")
+    private Long anuncioId;
 
     @NotNull(message = "Quantidade é obrigatória")
     @DecimalMin(value = "0.01", message = "Quantidade deve ser maior que zero")

@@ -28,8 +28,7 @@ import com.feira.conecta.repository.UsuarioRepository;
 @ExtendWith(MockitoExtension.class)
 class UsuarioServiceTest {
 
-    @Mock
-    private UsuarioRepository repository;
+    @Mock private UsuarioRepository repository;
 
     @InjectMocks
     private UsuarioService service;
@@ -40,21 +39,14 @@ class UsuarioServiceTest {
     @BeforeEach
     void setup() {
         usuario = Usuario.builder()
-                .id(1L)
-                .nome("João Silva")
-                .telefone("11999999999")
-                .tipo(TipoUsuario.VENDEDOR)
-                .createdAt(LocalDateTime.now())
-                .build();
+                .id(1L).nome("João Silva").telefone("11999999999")
+                .senha("$2a$10$hashbcrypt").tipo(TipoUsuario.VENDEDOR)
+                .createdAt(LocalDateTime.now()).build();
 
         dto = UsuarioDTO.builder()
-                .nome("João Silva")
-                .telefone("11999999999")
-                .tipo(TipoUsuario.VENDEDOR)
-                .build();
+                .nome("João Silva").telefone("11999999999")
+                .tipo(TipoUsuario.VENDEDOR).build();
     }
-
-    // CENÁRIOS FELIZES
 
     @Test
     void deveCriarUsuarioComSucesso() {
@@ -100,16 +92,12 @@ class UsuarioServiceTest {
     @Test
     void deveAtualizarUsuarioComSucesso() {
         UsuarioDTO dtoAtualizado = UsuarioDTO.builder()
-                .nome("João Atualizado")
-                .telefone("11999999999")
-                .tipo(TipoUsuario.COMPRADOR)
-                .build();
+                .nome("João Atualizado").telefone("11999999999")
+                .tipo(TipoUsuario.COMPRADOR).build();
 
         Usuario usuarioAtualizado = Usuario.builder()
-                .id(1L).nome("João Atualizado")
-                .telefone("11999999999")
-                .tipo(TipoUsuario.COMPRADOR)
-                .build();
+                .id(1L).nome("João Atualizado").telefone("11999999999")
+                .senha("hash").tipo(TipoUsuario.COMPRADOR).build();
 
         when(repository.findById(1L)).thenReturn(Optional.of(usuario));
         when(repository.save(any(Usuario.class))).thenReturn(usuarioAtualizado);
@@ -128,8 +116,6 @@ class UsuarioServiceTest {
         assertThatCode(() -> service.deletar(1L)).doesNotThrowAnyException();
         verify(repository, times(1)).deleteById(1L);
     }
-
-    // CENÁRIOS INFELIZES
 
     @Test
     void deveLancarExcecaoQuandoTelefoneJaCadastrado() {

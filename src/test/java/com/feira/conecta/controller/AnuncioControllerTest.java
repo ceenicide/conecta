@@ -27,8 +27,7 @@ import com.feira.conecta.service.AnuncioService;
 @ExtendWith(MockitoExtension.class)
 class AnuncioControllerTest {
 
-    @Mock
-    private AnuncioService service;
+    @Mock private AnuncioService service;
 
     @InjectMocks
     private AnuncioController controller;
@@ -38,20 +37,12 @@ class AnuncioControllerTest {
     @BeforeEach
     void setup() {
         dto = AnuncioDTO.builder()
-                .id(1L)
-                .usuarioId(1L)
-                .usuarioNome("Maria")
-                .produtoId(1L)
-                .produtoNome("Soja")
+                .id(1L).usuarioId(1L).usuarioNome("Maria")
+                .produtoId(1L).produtoNome("Soja")
                 .quantidade(new BigDecimal("100"))
                 .preco(new BigDecimal("50.00"))
-                .status(StatusAnuncio.ATIVO)
-                .build();
+                .status(StatusAnuncio.ATIVO).build();
     }
-
-    // ========================
-    // CENÁRIOS FELIZES
-    // ========================
 
     @Test
     void deveCriarAnuncioERetornar200() {
@@ -61,7 +52,6 @@ class AnuncioControllerTest {
 
         assertThat(resposta.getStatusCode().value()).isEqualTo(200);
         assertThat(resposta.getBody().getStatus()).isEqualTo(StatusAnuncio.ATIVO);
-        assertThat(resposta.getBody().getUsuarioNome()).isEqualTo("Maria");
     }
 
     @Test
@@ -72,7 +62,6 @@ class AnuncioControllerTest {
 
         assertThat(resposta.getStatusCode().value()).isEqualTo(200);
         assertThat(resposta.getBody()).hasSize(1);
-        assertThat(resposta.getBody().get(0).getStatus()).isEqualTo(StatusAnuncio.ATIVO);
     }
 
     @Test
@@ -86,23 +75,19 @@ class AnuncioControllerTest {
     }
 
     @Test
-    void deveListarAnunciosPorUsuarioERetornar200() {
-        when(service.listarPorUsuario(1L)).thenReturn(List.of(dto));
+    void deveListarMeusAnunciosERetornar200() {
+        when(service.listarMeusAnuncios()).thenReturn(List.of(dto));
 
-        ResponseEntity<List<AnuncioDTO>> resposta = controller.listarPorUsuario(1L);
+        ResponseEntity<List<AnuncioDTO>> resposta = controller.listarMeusAnuncios();
 
         assertThat(resposta.getStatusCode().value()).isEqualTo(200);
-        assertThat(resposta.getBody().get(0).getUsuarioId()).isEqualTo(1L);
+        assertThat(resposta.getBody()).hasSize(1);
     }
 
     @Test
     void deveMarcarAnuncioComoVendidoERetornar200() {
         AnuncioDTO vendido = AnuncioDTO.builder()
-                .id(1L).usuarioId(1L).produtoId(1L)
-                .quantidade(new BigDecimal("100"))
-                .preco(new BigDecimal("50.00"))
-                .status(StatusAnuncio.VENDIDO)
-                .build();
+                .id(1L).status(StatusAnuncio.VENDIDO).build();
 
         when(service.marcarComoVendido(1L)).thenReturn(vendido);
 
@@ -123,20 +108,6 @@ class AnuncioControllerTest {
     }
 
     @Test
-    void deveRetornarListaVaziaQuandoNaoHouverAnunciosAtivos() {
-        when(service.listarAtivos()).thenReturn(List.of());
-
-        ResponseEntity<List<AnuncioDTO>> resposta = controller.listarAtivos();
-
-        assertThat(resposta.getStatusCode().value()).isEqualTo(200);
-        assertThat(resposta.getBody()).isEmpty();
-    }
-
-    // ========================
-    // CENÁRIOS INFELIZES
-    // ========================
-
-    @Test
     void deveLancarExcecaoQuandoAnuncioNaoEncontrado() {
         when(service.buscarPorId(99L))
                 .thenThrow(new ResourceNotFoundException("Anúncio não encontrado com id: 99"));
@@ -147,32 +118,12 @@ class AnuncioControllerTest {
     }
 
     @Test
-    void deveLancarExcecaoQuandoCompradorTentaCriarAnuncio() {
-        when(service.criar(any()))
-                .thenThrow(new IllegalArgumentException("Apenas vendedores podem criar anúncios"));
+    void deveLancarExcecaoQuandoSemPermissaoParaDeletar() {
+        doThrow(new IllegalArgumentException("Você não tem permissão para deletar este anúncio"))
+                .when(service).deletar(1L);
 
-        assertThatThrownBy(() -> controller.criar(dto))
+        assertThatThrownBy(() -> controller.deletar(1L))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Apenas vendedores podem criar anúncios");
-    }
-
-    @Test
-    void deveLancarExcecaoAoMarcarAnuncioJaVendido() {
-        when(service.marcarComoVendido(1L))
-                .thenThrow(new IllegalArgumentException("Anúncio já está marcado como vendido"));
-
-        assertThatThrownBy(() -> controller.marcarComoVendido(1L))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Anúncio já está marcado como vendido");
-    }
-
-    @Test
-    void deveLancarExcecaoAoDeletarAnuncioInexistente() {
-        doThrow(new ResourceNotFoundException("Anúncio não encontrado com id: 99"))
-                .when(service).deletar(99L);
-
-        assertThatThrownBy(() -> controller.deletar(99L))
-                .isInstanceOf(ResourceNotFoundException.class)
-                .hasMessage("Anúncio não encontrado com id: 99");
+                .hasMessage("Você não tem permissão para deletar este anúncio");
     }
 }

@@ -6,6 +6,7 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.feira.conecta.config.SecurityUtils;
 import com.feira.conecta.domain.Anuncio;
 import com.feira.conecta.domain.Pedido;
 import com.feira.conecta.domain.StatusAnuncio;
@@ -16,7 +17,6 @@ import com.feira.conecta.dto.PedidoDTO;
 import com.feira.conecta.exception.ResourceNotFoundException;
 import com.feira.conecta.repository.AnuncioRepository;
 import com.feira.conecta.repository.PedidoRepository;
-import com.feira.conecta.repository.UsuarioRepository;
 
 import lombok.RequiredArgsConstructor;
 
@@ -25,16 +25,13 @@ import lombok.RequiredArgsConstructor;
 public class PedidoService {
 
     private final PedidoRepository pedidoRepository;
-    private final UsuarioRepository usuarioRepository;
     private final AnuncioRepository anuncioRepository;
+    private final SecurityUtils securityUtils;
 
     @Transactional
     public PedidoDTO criar(PedidoDTO dto) {
-        Usuario comprador = usuarioRepository.findById(dto.getCompradorId())
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Usuário não encontrado com id: " + dto.getCompradorId()));
+        Usuario comprador = securityUtils.getUsuarioLogado();
 
-        // só COMPRADOR pode fazer pedido
         if (comprador.getTipo() != TipoUsuario.COMPRADOR) {
             throw new IllegalArgumentException("Apenas compradores podem fazer pedidos");
         }
@@ -43,64 +40,73 @@ public class PedidoService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Anúncio não encontrado com id: " + dto.getAnuncioId()));
 
-        // anúncio precisa estar ativo
         if (anuncio.getStatus() != StatusAnuncio.ATIVO) {
             throw new IllegalArgumentException("Este anúncio não está disponível");
         }
 
-        // comprador não pode pedir do próprio anúncio
         if (anuncio.getUsuario().getId().equals(comprador.getId())) {
             throw new IllegalArgumentException("Você não pode fazer pedido do seu próprio anúncio");
         }
 
-        // quantidade não pode ultrapassar o disponível
         if (dto.getQuantidade().compareTo(anuncio.getQuantidade()) > 0) {
-            throw new IllegalArgumentException(
-                    "Quantidade solicitada maior que a disponível no anúncio");
+            throw new IllegalArgumentException("Quantidade solicitada maior que a disponível no anúncio");
         }
 
         Pedido pedido = Pedido.builder()
-        .comprador(comprador)
-        .anuncio(anuncio)
-        .quantidade(dto.getQuantidade())
-        .status(StatusPedido.PENDENTE)
-        .createdAt(LocalDateTime.now()) // ← adiciona isso
-        .build();
+                .comprador(comprador)
+                .anuncio(anuncio)
+                .quantidade(dto.getQuantidade())
+                .status(StatusPedido.PENDENTE)
+                .createdAt(LocalDateTime.now())
+                .build();
 
         return toDTO(pedidoRepository.save(pedido));
     }
 
     @Transactional(readOnly = true)
     public PedidoDTO buscarPorId(Long id) {
-        return pedidoRepository.findById(id)
-                .map(this::toDTO)
+        Usuario usuario = securityUtils.getUsuarioLogado();
+
+        Pedido pedido = pedidoRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Pedido não encontrado com id: " + id));
+
+        // Só o comprador ou o vendedor do anúncio podem ver o pedido
+        boolean isComprador = pedido.getComprador().getId().equals(usuario.getId());
+        boolean isVendedor = pedido.getAnuncio().getUsuario().getId().equals(usuario.getId());
+
+        if (!isComprador && !isVendedor) {
+            throw new IllegalArgumentException("Você não tem permissão para visualizar este pedido");
+        }
+
+        return toDTO(pedido);
     }
 
     @Transactional(readOnly = true)
-    public List<PedidoDTO> listarPorComprador(Long compradorId) {
-        if (!usuarioRepository.existsById(compradorId)) {
-            throw new ResourceNotFoundException(
-                    "Usuário não encontrado com id: " + compradorId);
-        }
-        return pedidoRepository.findByCompradorId(compradorId).stream()
+    public List<PedidoDTO> listarMeusPedidos() {
+        Usuario comprador = securityUtils.getUsuarioLogado();
+        return pedidoRepository.findByCompradorId(comprador.getId()).stream()
                 .map(this::toDTO)
                 .toList();
     }
 
     @Transactional
     public PedidoDTO confirmar(Long id) {
+        Usuario usuario = securityUtils.getUsuarioLogado();
+
         Pedido pedido = pedidoRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Pedido não encontrado com id: " + id));
 
-        if (pedido.getStatus() != StatusPedido.PENDENTE) {
-            throw new IllegalArgumentException(
-                    "Apenas pedidos pendentes podem ser confirmados");
+        // Só o vendedor do anúncio pode confirmar
+        if (!pedido.getAnuncio().getUsuario().getId().equals(usuario.getId())) {
+            throw new IllegalArgumentException("Você não tem permissão para confirmar este pedido");
         }
 
-        // confirma o pedido e marca o anúncio como vendido
+        if (pedido.getStatus() != StatusPedido.PENDENTE) {
+            throw new IllegalArgumentException("Apenas pedidos pendentes podem ser confirmados");
+        }
+
         pedido.setStatus(StatusPedido.CONFIRMADO);
         pedido.getAnuncio().setStatus(StatusAnuncio.VENDIDO);
 
@@ -110,13 +116,19 @@ public class PedidoService {
 
     @Transactional
     public PedidoDTO finalizar(Long id) {
+        Usuario usuario = securityUtils.getUsuarioLogado();
+
         Pedido pedido = pedidoRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Pedido não encontrado com id: " + id));
 
+        // Só o comprador pode finalizar
+        if (!pedido.getComprador().getId().equals(usuario.getId())) {
+            throw new IllegalArgumentException("Você não tem permissão para finalizar este pedido");
+        }
+
         if (pedido.getStatus() != StatusPedido.CONFIRMADO) {
-            throw new IllegalArgumentException(
-                    "Apenas pedidos confirmados podem ser finalizados");
+            throw new IllegalArgumentException("Apenas pedidos confirmados podem ser finalizados");
         }
 
         pedido.setStatus(StatusPedido.FINALIZADO);

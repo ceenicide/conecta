@@ -6,6 +6,7 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.feira.conecta.config.SecurityUtils;
 import com.feira.conecta.domain.Anuncio;
 import com.feira.conecta.domain.Produto;
 import com.feira.conecta.domain.StatusAnuncio;
@@ -15,7 +16,6 @@ import com.feira.conecta.dto.AnuncioDTO;
 import com.feira.conecta.exception.ResourceNotFoundException;
 import com.feira.conecta.repository.AnuncioRepository;
 import com.feira.conecta.repository.ProdutoRepository;
-import com.feira.conecta.repository.UsuarioRepository;
 
 import lombok.RequiredArgsConstructor;
 
@@ -24,34 +24,29 @@ import lombok.RequiredArgsConstructor;
 public class AnuncioService {
 
     private final AnuncioRepository anuncioRepository;
-    private final UsuarioRepository usuarioRepository;
     private final ProdutoRepository produtoRepository;
+    private final SecurityUtils securityUtils;
 
     @Transactional
     public AnuncioDTO criar(AnuncioDTO dto) {
-        // busca o usuário — lança exceção se não existir
-        Usuario usuario = usuarioRepository.findById(dto.getUsuarioId())
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Usuário não encontrado com id: " + dto.getUsuarioId()));
+        Usuario usuario = securityUtils.getUsuarioLogado();
 
-        // regra de negócio: só VENDEDOR pode criar anúncio
         if (usuario.getTipo() != TipoUsuario.VENDEDOR) {
             throw new IllegalArgumentException("Apenas vendedores podem criar anúncios");
         }
 
-        // busca o produto — lança exceção se não existir
         Produto produto = produtoRepository.findById(dto.getProdutoId())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Produto não encontrado com id: " + dto.getProdutoId()));
 
-                        Anuncio anuncio = Anuncio.builder()
-                        .usuario(usuario)
-                        .produto(produto)
-                        .quantidade(dto.getQuantidade())
-                        .preco(dto.getPreco())
-                        .status(StatusAnuncio.ATIVO)
-                        .createdAt(LocalDateTime.now()) // ← adiciona isso
-                        .build();
+        Anuncio anuncio = Anuncio.builder()
+                .usuario(usuario)
+                .produto(produto)
+                .quantidade(dto.getQuantidade())
+                .preco(dto.getPreco())
+                .status(StatusAnuncio.ATIVO)
+                .createdAt(LocalDateTime.now())
+                .build();
 
         return toDTO(anuncioRepository.save(anuncio));
     }
@@ -72,23 +67,26 @@ public class AnuncioService {
     }
 
     @Transactional(readOnly = true)
-    public List<AnuncioDTO> listarPorUsuario(Long usuarioId) {
-        if (!usuarioRepository.existsById(usuarioId)) {
-            throw new ResourceNotFoundException(
-                    "Usuário não encontrado com id: " + usuarioId);
-        }
-        return anuncioRepository.findByUsuarioId(usuarioId).stream()
+    public List<AnuncioDTO> listarMeusAnuncios() {
+        Usuario usuario = securityUtils.getUsuarioLogado();
+        return anuncioRepository.findByUsuarioId(usuario.getId()).stream()
                 .map(this::toDTO)
                 .toList();
     }
 
     @Transactional
     public AnuncioDTO marcarComoVendido(Long id) {
+        Usuario usuario = securityUtils.getUsuarioLogado();
+
         Anuncio anuncio = anuncioRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Anúncio não encontrado com id: " + id));
 
-        // regra: não pode marcar como vendido o que já está vendido
+        // Só o dono pode marcar como vendido
+        if (!anuncio.getUsuario().getId().equals(usuario.getId())) {
+            throw new IllegalArgumentException("Você não tem permissão para alterar este anúncio");
+        }
+
         if (anuncio.getStatus() == StatusAnuncio.VENDIDO) {
             throw new IllegalArgumentException("Anúncio já está marcado como vendido");
         }
@@ -99,10 +97,17 @@ public class AnuncioService {
 
     @Transactional
     public void deletar(Long id) {
-        if (!anuncioRepository.existsById(id)) {
-            throw new ResourceNotFoundException(
-                    "Anúncio não encontrado com id: " + id);
+        Usuario usuario = securityUtils.getUsuarioLogado();
+
+        Anuncio anuncio = anuncioRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Anúncio não encontrado com id: " + id));
+
+        // Só o dono pode deletar
+        if (!anuncio.getUsuario().getId().equals(usuario.getId())) {
+            throw new IllegalArgumentException("Você não tem permissão para deletar este anúncio");
         }
+
         anuncioRepository.deleteById(id);
     }
 

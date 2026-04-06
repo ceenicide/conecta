@@ -36,18 +36,20 @@ public class Usuario {
     @Column(nullable = false, unique = true)
     private String telefone;
 
+    @Column(nullable = false)
+    private String senha;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private TipoUsuario tipo;
 
-@Builder.Default
-@Column(nullable = false, updatable = false)
-private LocalDateTime createdAt = LocalDateTime.now();
+    @Column(nullable = false, updatable = false)
+    private LocalDateTime createdAt;
 
-@PrePersist
-public void prePersist() {
-    if (this.createdAt == null) {
-        this.createdAt = LocalDateTime.now();
+    @PrePersist
+    public void prePersist() {
+        if (this.createdAt == null) {
+            this.createdAt = LocalDateTime.now();
+        }
     }
-}
 }

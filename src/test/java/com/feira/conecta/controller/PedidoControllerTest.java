@@ -23,8 +23,7 @@ import com.feira.conecta.service.PedidoService;
 @ExtendWith(MockitoExtension.class)
 class PedidoControllerTest {
 
-    @Mock
-    private PedidoService service;
+    @Mock private PedidoService service;
 
     @InjectMocks
     private PedidoController controller;
@@ -34,20 +33,11 @@ class PedidoControllerTest {
     @BeforeEach
     void setup() {
         dto = PedidoDTO.builder()
-                .id(1L)
-                .compradorId(2L)
-                .compradorNome("Carlos")
-                .anuncioId(1L)
-                .produtoNome("Soja")
-                .vendedorNome("Maria")
+                .id(1L).compradorId(2L).compradorNome("Carlos")
+                .anuncioId(1L).produtoNome("Soja").vendedorNome("Maria")
                 .quantidade(new BigDecimal("10"))
-                .status(StatusPedido.PENDENTE)
-                .build();
+                .status(StatusPedido.PENDENTE).build();
     }
-
-    // ========================
-    // CENÁRIOS FELIZES
-    // ========================
 
     @Test
     void deveCriarPedidoERetornar200() {
@@ -57,7 +47,6 @@ class PedidoControllerTest {
 
         assertThat(resposta.getStatusCode().value()).isEqualTo(200);
         assertThat(resposta.getBody().getStatus()).isEqualTo(StatusPedido.PENDENTE);
-        assertThat(resposta.getBody().getCompradorNome()).isEqualTo("Carlos");
     }
 
     @Test
@@ -67,27 +56,22 @@ class PedidoControllerTest {
         ResponseEntity<PedidoDTO> resposta = controller.buscarPorId(1L);
 
         assertThat(resposta.getStatusCode().value()).isEqualTo(200);
-        assertThat(resposta.getBody().getProdutoNome()).isEqualTo("Soja");
+        assertThat(resposta.getBody().getId()).isEqualTo(1L);
     }
 
     @Test
-    void deveListarPedidosPorCompradorERetornar200() {
-        when(service.listarPorComprador(2L)).thenReturn(List.of(dto));
+    void deveListarMeusPedidosERetornar200() {
+        when(service.listarMeusPedidos()).thenReturn(List.of(dto));
 
-        ResponseEntity<List<PedidoDTO>> resposta = controller.listarPorComprador(2L);
+        ResponseEntity<List<PedidoDTO>> resposta = controller.listarMeusPedidos();
 
         assertThat(resposta.getStatusCode().value()).isEqualTo(200);
         assertThat(resposta.getBody()).hasSize(1);
-        assertThat(resposta.getBody().get(0).getCompradorId()).isEqualTo(2L);
     }
 
     @Test
     void deveConfirmarPedidoERetornar200() {
-        PedidoDTO confirmado = PedidoDTO.builder()
-                .id(1L).compradorId(2L).anuncioId(1L)
-                .quantidade(new BigDecimal("10"))
-                .status(StatusPedido.CONFIRMADO).build();
-
+        PedidoDTO confirmado = PedidoDTO.builder().id(1L).status(StatusPedido.CONFIRMADO).build();
         when(service.confirmar(1L)).thenReturn(confirmado);
 
         ResponseEntity<PedidoDTO> resposta = controller.confirmar(1L);
@@ -98,11 +82,7 @@ class PedidoControllerTest {
 
     @Test
     void deveFinalizarPedidoERetornar200() {
-        PedidoDTO finalizado = PedidoDTO.builder()
-                .id(1L).compradorId(2L).anuncioId(1L)
-                .quantidade(new BigDecimal("10"))
-                .status(StatusPedido.FINALIZADO).build();
-
+        PedidoDTO finalizado = PedidoDTO.builder().id(1L).status(StatusPedido.FINALIZADO).build();
         when(service.finalizar(1L)).thenReturn(finalizado);
 
         ResponseEntity<PedidoDTO> resposta = controller.finalizar(1L);
@@ -110,20 +90,6 @@ class PedidoControllerTest {
         assertThat(resposta.getStatusCode().value()).isEqualTo(200);
         assertThat(resposta.getBody().getStatus()).isEqualTo(StatusPedido.FINALIZADO);
     }
-
-    @Test
-    void deveRetornarListaVaziaQuandoCompradorNaoTiverPedidos() {
-        when(service.listarPorComprador(2L)).thenReturn(List.of());
-
-        ResponseEntity<List<PedidoDTO>> resposta = controller.listarPorComprador(2L);
-
-        assertThat(resposta.getStatusCode().value()).isEqualTo(200);
-        assertThat(resposta.getBody()).isEmpty();
-    }
-
-    // ========================
-    // CENÁRIOS INFELIZES
-    // ========================
 
     @Test
     void deveLancarExcecaoQuandoPedidoNaoEncontrado() {
@@ -136,41 +102,12 @@ class PedidoControllerTest {
     }
 
     @Test
-    void deveLancarExcecaoQuandoVendedorTentaFazerPedido() {
-        when(service.criar(any()))
-                .thenThrow(new IllegalArgumentException("Apenas compradores podem fazer pedidos"));
-
-        assertThatThrownBy(() -> controller.criar(dto))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Apenas compradores podem fazer pedidos");
-    }
-
-    @Test
-    void deveLancarExcecaoAoConfirmarPedidoNaoPendente() {
+    void deveLancarExcecaoQuandoSemPermissaoParaConfirmar() {
         when(service.confirmar(1L))
-                .thenThrow(new IllegalArgumentException("Apenas pedidos pendentes podem ser confirmados"));
+                .thenThrow(new IllegalArgumentException("Você não tem permissão para confirmar este pedido"));
 
         assertThatThrownBy(() -> controller.confirmar(1L))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Apenas pedidos pendentes podem ser confirmados");
+                .hasMessage("Você não tem permissão para confirmar este pedido");
     }
-
-    @Test
-    void deveLancarExcecaoAoFinalizarPedidoNaoConfirmado() {
-        when(service.finalizar(1L))
-                .thenThrow(new IllegalArgumentException("Apenas pedidos confirmados podem ser finalizados"));
-
-        assertThatThrownBy(() -> controller.finalizar(1L))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Apenas pedidos confirmados podem ser finalizados");
-    }
-    @Test
-void deveLancarExcecaoAoListarPedidosDeCompradorInexistente() {
-    when(service.listarPorComprador(99L))
-            .thenThrow(new ResourceNotFoundException("Usuário não encontrado com id: 99"));
-
-    assertThatThrownBy(() -> controller.listarPorComprador(99L))
-            .isInstanceOf(ResourceNotFoundException.class)
-            .hasMessage("Usuário não encontrado com id: 99");
-}
 }

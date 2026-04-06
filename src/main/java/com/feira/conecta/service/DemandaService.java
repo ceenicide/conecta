@@ -1,5 +1,6 @@
 package com.feira.conecta.service;
 
+import com.feira.conecta.config.SecurityUtils;
 import com.feira.conecta.domain.*;
 import com.feira.conecta.dto.DemandaDTO;
 import com.feira.conecta.exception.ResourceNotFoundException;
@@ -14,15 +15,13 @@ import java.util.List;
 public class DemandaService {
 
     private final DemandaRepository repository;
-    private final UsuarioRepository usuarioRepository;
     private final ProdutoRepository produtoRepository;
     private final MatchingService matchingService;
+    private final SecurityUtils securityUtils;
 
     @Transactional
     public DemandaDTO criar(DemandaDTO dto) {
-        Usuario comprador = usuarioRepository.findById(dto.getCompradorId())
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Usuário não encontrado com id: " + dto.getCompradorId()));
+        Usuario comprador = securityUtils.getUsuarioLogado();
 
         if (comprador.getTipo() != TipoUsuario.COMPRADOR) {
             throw new IllegalArgumentException("Apenas compradores podem criar demandas");
@@ -41,8 +40,6 @@ public class DemandaService {
                 .build();
 
         Demanda salva = repository.save(demanda);
-
-        // busca matches automaticamente após criar
         matchingService.buscarMatchesPorDemanda(salva);
 
         return toDTO(salva);
@@ -55,8 +52,9 @@ public class DemandaService {
     }
 
     @Transactional(readOnly = true)
-    public List<DemandaDTO> listarPorComprador(Long compradorId) {
-        return repository.findByCompradorId(compradorId).stream()
+    public List<DemandaDTO> listarMinhasDemandas() {
+        Usuario comprador = securityUtils.getUsuarioLogado();
+        return repository.findByCompradorId(comprador.getId()).stream()
                 .map(this::toDTO).toList();
     }
 

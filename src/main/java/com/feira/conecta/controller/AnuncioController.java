@@ -16,7 +16,7 @@ import com.feira.conecta.dto.AnuncioDTO;
 import com.feira.conecta.service.AnuncioService;
 
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -29,7 +29,8 @@ public class AnuncioController {
 
     private final AnuncioService service;
 
-    @Operation(summary = "Criar anúncio", description = "Apenas usuários do tipo VENDEDOR podem criar anúncios")
+    @Operation(summary = "Criar anúncio", description = "Apenas VENDEDOR. Usuário obtido do token JWT.")
+    @SecurityRequirement(name = "Bearer")
     @PostMapping
     public ResponseEntity<AnuncioDTO> criar(@RequestBody @Valid AnuncioDTO dto) {
         return ResponseEntity.ok(service.criar(dto));
@@ -47,20 +48,22 @@ public class AnuncioController {
         return ResponseEntity.ok(service.buscarPorId(id));
     }
 
-    @Operation(summary = "Listar anúncios por usuário")
-    @GetMapping("/usuario/{usuarioId}")
-    public ResponseEntity<List<AnuncioDTO>> listarPorUsuario(@PathVariable Long usuarioId) {
-        return ResponseEntity.ok(service.listarPorUsuario(usuarioId));
+    @Operation(summary = "Listar meus anúncios", description = "Retorna apenas os anúncios do usuário autenticado")
+    @SecurityRequirement(name = "Bearer")
+    @GetMapping("/meus")
+    public ResponseEntity<List<AnuncioDTO>> listarMeusAnuncios() {
+        return ResponseEntity.ok(service.listarMeusAnuncios());
     }
 
-    @Operation(summary = "Marcar anúncio como vendido")
+    @Operation(summary = "Marcar anúncio como vendido", description = "Apenas o dono do anúncio pode executar")
+    @SecurityRequirement(name = "Bearer")
     @PatchMapping("/{id}/vendido")
     public ResponseEntity<AnuncioDTO> marcarComoVendido(@PathVariable Long id) {
         return ResponseEntity.ok(service.marcarComoVendido(id));
     }
 
-    @Operation(summary = "Deletar anúncio")
-    @ApiResponse(responseCode = "204", description = "Anúncio deletado")
+    @Operation(summary = "Deletar anúncio", description = "Apenas o dono do anúncio pode executar")
+    @SecurityRequirement(name = "Bearer")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deletar(@PathVariable Long id) {
         service.deletar(id);

@@ -16,9 +16,10 @@ import lombok.Setter;
 
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class OfertaFuturaDTO {
+
     private Long id;
 
-    @NotNull(message = "Usuário é obrigatório")
+    // Preenchido internamente pelo token — ignorado na entrada
     private Long usuarioId;
     private String usuarioNome;
 

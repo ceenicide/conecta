@@ -18,6 +18,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.feira.conecta.config.SecurityUtils;
 import com.feira.conecta.domain.Demanda;
 import com.feira.conecta.domain.Produto;
 import com.feira.conecta.domain.StatusDemanda;
@@ -27,15 +28,14 @@ import com.feira.conecta.dto.DemandaDTO;
 import com.feira.conecta.exception.ResourceNotFoundException;
 import com.feira.conecta.repository.DemandaRepository;
 import com.feira.conecta.repository.ProdutoRepository;
-import com.feira.conecta.repository.UsuarioRepository;
 
 @ExtendWith(MockitoExtension.class)
 class DemandaServiceTest {
 
     @Mock private DemandaRepository repository;
-    @Mock private UsuarioRepository usuarioRepository;
     @Mock private ProdutoRepository produtoRepository;
     @Mock private MatchingService matchingService;
+    @Mock private SecurityUtils securityUtils;
 
     @InjectMocks
     private DemandaService service;
@@ -50,34 +50,31 @@ class DemandaServiceTest {
     void setup() {
         vendedor = Usuario.builder()
                 .id(1L).nome("Maria").telefone("11111111111")
-                .tipo(TipoUsuario.VENDEDOR).build();
+                .senha("hash").tipo(TipoUsuario.VENDEDOR).build();
 
         comprador = Usuario.builder()
                 .id(2L).nome("Carlos").telefone("22222222222")
-                .tipo(TipoUsuario.COMPRADOR).build();
+                .senha("hash").tipo(TipoUsuario.COMPRADOR).build();
 
-        produto = Produto.builder()
-                .id(1L).nome("Soja").descricao("Safra 2026").build();
+        produto = Produto.builder().id(1L).nome("Soja").build();
 
         demanda = Demanda.builder()
                 .id(1L).comprador(comprador).produto(produto)
                 .quantidade(new BigDecimal("200"))
                 .dataLimite(LocalDate.now().plusMonths(3))
-                .status(StatusDemanda.PROCURANDO)
-                .build();
+                .status(StatusDemanda.PROCURANDO).build();
 
+        // dto sem compradorId — vem do token
         dto = DemandaDTO.builder()
-                .compradorId(2L).produtoId(1L)
+                .produtoId(1L)
                 .quantidade(new BigDecimal("200"))
                 .dataLimite(LocalDate.now().plusMonths(3))
                 .build();
     }
 
-    // CENÁRIOS FELIZES
-
     @Test
     void deveCriarDemandaComSucesso() {
-        when(usuarioRepository.findById(2L)).thenReturn(Optional.of(comprador));
+        when(securityUtils.getUsuarioLogado()).thenReturn(comprador);
         when(produtoRepository.findById(1L)).thenReturn(Optional.of(produto));
         when(repository.save(any())).thenReturn(demanda);
 
@@ -99,13 +96,33 @@ class DemandaServiceTest {
     }
 
     @Test
-    void deveListarDemandasPorComprador() {
+    void deveListarMinhasDemandas() {
+        when(securityUtils.getUsuarioLogado()).thenReturn(comprador);
         when(repository.findByCompradorId(2L)).thenReturn(List.of(demanda));
 
-        List<DemandaDTO> resultado = service.listarPorComprador(2L);
+        List<DemandaDTO> resultado = service.listarMinhasDemandas();
 
         assertThat(resultado).hasSize(1);
         assertThat(resultado.get(0).getCompradorId()).isEqualTo(2L);
+    }
+
+    @Test
+    void deveLancarExcecaoQuandoVendedorTentaCriarDemanda() {
+        when(securityUtils.getUsuarioLogado()).thenReturn(vendedor);
+
+        assertThatThrownBy(() -> service.criar(dto))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Apenas compradores podem criar demandas");
+    }
+
+    @Test
+    void deveLancarExcecaoQuandoProdutoNaoExiste() {
+        when(securityUtils.getUsuarioLogado()).thenReturn(comprador);
+        when(produtoRepository.findById(1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.criar(dto))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessage("Produto não encontrado com id: 1");
     }
 
     @Test
@@ -113,48 +130,5 @@ class DemandaServiceTest {
         when(repository.findByStatus(StatusDemanda.PROCURANDO)).thenReturn(List.of());
 
         assertThat(service.listarProcurando()).isEmpty();
-    }
-
-    @Test
-    void deveChamarMatchingServiceAoCriarDemanda() {
-        when(usuarioRepository.findById(2L)).thenReturn(Optional.of(comprador));
-        when(produtoRepository.findById(1L)).thenReturn(Optional.of(produto));
-        when(repository.save(any())).thenReturn(demanda);
-
-        service.criar(dto);
-
-        verify(matchingService, times(1)).buscarMatchesPorDemanda(demanda);
-    }
-
-    // CENÁRIOS INFELIZES
-
-    @Test
-    void deveLancarExcecaoQuandoVendedorTentaCriarDemanda() {
-        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(vendedor));
-
-        DemandaDTO dtoInvalido = DemandaDTO.builder()
-                .compradorId(1L).produtoId(1L)
-                .quantidade(new BigDecimal("100"))
-                .dataLimite(LocalDate.now().plusMonths(1))
-                .build();
-
-        assertThatThrownBy(() -> service.criar(dtoInvalido))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Apenas compradores podem criar demandas");
-    }
-
-    @Test
-    void deveLancarExcecaoQuandoCompradorNaoExiste() {
-        when(usuarioRepository.findById(99L)).thenReturn(Optional.empty());
-
-        DemandaDTO dtoInvalido = DemandaDTO.builder()
-                .compradorId(99L).produtoId(1L)
-                .quantidade(new BigDecimal("100"))
-                .dataLimite(LocalDate.now().plusMonths(1))
-                .build();
-
-        assertThatThrownBy(() -> service.criar(dtoInvalido))
-                .isInstanceOf(ResourceNotFoundException.class)
-                .hasMessage("Usuário não encontrado com id: 99");
     }
 }

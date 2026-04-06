@@ -21,8 +21,7 @@ import com.feira.conecta.repository.UsuarioRepository;
 @ExtendWith(MockitoExtension.class)
 class CustomUserDetailsServiceTest {
 
-    @Mock
-    private UsuarioRepository repository;
+    @Mock private UsuarioRepository repository;
 
     @InjectMocks
     private CustomUserDetailsService service;
@@ -31,13 +30,15 @@ class CustomUserDetailsServiceTest {
     void deveCarregarUsuarioPorTelefone() {
         Usuario usuario = Usuario.builder()
                 .id(1L).nome("Maria").telefone("11111111111")
-                .tipo(TipoUsuario.VENDEDOR).build();
+                .senha("$2a$10$hashbcrypt").tipo(TipoUsuario.VENDEDOR).build();
 
         when(repository.findByTelefone("11111111111")).thenReturn(Optional.of(usuario));
 
         UserDetails resultado = service.loadUserByUsername("11111111111");
 
         assertThat(resultado.getUsername()).isEqualTo("11111111111");
+        // senha agora é o hash real, não vazio
+        assertThat(resultado.getPassword()).isEqualTo("$2a$10$hashbcrypt");
         assertThat(resultado.getAuthorities()).isNotEmpty();
     }
 
@@ -47,14 +48,14 @@ class CustomUserDetailsServiceTest {
 
         assertThatThrownBy(() -> service.loadUserByUsername("99999999999"))
                 .isInstanceOf(UsernameNotFoundException.class)
-                .hasMessageContaining("99999999999");
+                .hasMessage("Usuário não encontrado");
     }
 
     @Test
     void deveAtribuirRoleCorretaAoVendedor() {
         Usuario vendedor = Usuario.builder()
                 .id(1L).nome("Maria").telefone("11111111111")
-                .tipo(TipoUsuario.VENDEDOR).build();
+                .senha("hash").tipo(TipoUsuario.VENDEDOR).build();
 
         when(repository.findByTelefone("11111111111")).thenReturn(Optional.of(vendedor));
 
@@ -68,7 +69,7 @@ class CustomUserDetailsServiceTest {
     void deveAtribuirRoleCorretaAoComprador() {
         Usuario comprador = Usuario.builder()
                 .id(2L).nome("Carlos").telefone("22222222222")
-                .tipo(TipoUsuario.COMPRADOR).build();
+                .senha("hash").tipo(TipoUsuario.COMPRADOR).build();
 
         when(repository.findByTelefone("22222222222")).thenReturn(Optional.of(comprador));
 

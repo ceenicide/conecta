@@ -13,23 +13,17 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class AnuncioDTO {
 
     private Long id;
 
-    @NotNull(message = "Usuário é obrigatório")
+    // Preenchido internamente pelo token — ignorado na entrada
     private Long usuarioId;
+    private String usuarioNome;
 
     @NotNull(message = "Produto é obrigatório")
     private Long produtoId;
-
-    // campos de leitura — retornados na resposta
-    private String usuarioNome;
     private String produtoNome;
 
     @NotNull(message = "Quantidade é obrigatória")

@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.feira.conecta.config.SecurityUtils;
 import com.feira.conecta.domain.OfertaFutura;
 import com.feira.conecta.domain.Produto;
 import com.feira.conecta.domain.StatusOferta;
@@ -14,7 +15,6 @@ import com.feira.conecta.dto.OfertaFuturaDTO;
 import com.feira.conecta.exception.ResourceNotFoundException;
 import com.feira.conecta.repository.OfertaFuturaRepository;
 import com.feira.conecta.repository.ProdutoRepository;
-import com.feira.conecta.repository.UsuarioRepository;
 
 import lombok.RequiredArgsConstructor;
 
@@ -23,15 +23,13 @@ import lombok.RequiredArgsConstructor;
 public class OfertaFuturaService {
 
     private final OfertaFuturaRepository repository;
-    private final UsuarioRepository usuarioRepository;
     private final ProdutoRepository produtoRepository;
     private final MatchingService matchingService;
+    private final SecurityUtils securityUtils;
 
     @Transactional
     public OfertaFuturaDTO criar(OfertaFuturaDTO dto) {
-        Usuario usuario = usuarioRepository.findById(dto.getUsuarioId())
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Usuário não encontrado com id: " + dto.getUsuarioId()));
+        Usuario usuario = securityUtils.getUsuarioLogado();
 
         if (usuario.getTipo() != TipoUsuario.VENDEDOR) {
             throw new IllegalArgumentException("Apenas vendedores podem criar ofertas futuras");
@@ -50,8 +48,6 @@ public class OfertaFuturaService {
                 .build();
 
         OfertaFutura salva = repository.save(oferta);
-
-        // busca matches automaticamente após criar
         matchingService.buscarMatchesPorOferta(salva);
 
         return toDTO(salva);
@@ -64,8 +60,9 @@ public class OfertaFuturaService {
     }
 
     @Transactional(readOnly = true)
-    public List<OfertaFuturaDTO> listarPorUsuario(Long usuarioId) {
-        return repository.findByUsuarioId(usuarioId).stream()
+    public List<OfertaFuturaDTO> listarMinhasOfertas() {
+        Usuario usuario = securityUtils.getUsuarioLogado();
+        return repository.findByUsuarioId(usuario.getId()).stream()
                 .map(this::toDTO).toList();
     }
 

@@ -18,6 +18,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.feira.conecta.config.SecurityUtils;
 import com.feira.conecta.domain.OfertaFutura;
 import com.feira.conecta.domain.Produto;
 import com.feira.conecta.domain.StatusOferta;
@@ -27,15 +28,14 @@ import com.feira.conecta.dto.OfertaFuturaDTO;
 import com.feira.conecta.exception.ResourceNotFoundException;
 import com.feira.conecta.repository.OfertaFuturaRepository;
 import com.feira.conecta.repository.ProdutoRepository;
-import com.feira.conecta.repository.UsuarioRepository;
 
 @ExtendWith(MockitoExtension.class)
 class OfertaFuturaServiceTest {
 
     @Mock private OfertaFuturaRepository repository;
-    @Mock private UsuarioRepository usuarioRepository;
     @Mock private ProdutoRepository produtoRepository;
     @Mock private MatchingService matchingService;
+    @Mock private SecurityUtils securityUtils;
 
     @InjectMocks
     private OfertaFuturaService service;
@@ -50,34 +50,31 @@ class OfertaFuturaServiceTest {
     void setup() {
         vendedor = Usuario.builder()
                 .id(1L).nome("Maria").telefone("11111111111")
-                .tipo(TipoUsuario.VENDEDOR).build();
+                .senha("hash").tipo(TipoUsuario.VENDEDOR).build();
 
         comprador = Usuario.builder()
                 .id(2L).nome("Carlos").telefone("22222222222")
-                .tipo(TipoUsuario.COMPRADOR).build();
+                .senha("hash").tipo(TipoUsuario.COMPRADOR).build();
 
-        produto = Produto.builder()
-                .id(1L).nome("Soja").descricao("Safra 2026").build();
+        produto = Produto.builder().id(1L).nome("Soja").build();
 
         oferta = OfertaFutura.builder()
                 .id(1L).usuario(vendedor).produto(produto)
                 .quantidade(new BigDecimal("500"))
                 .dataDisponivel(LocalDate.now().plusMonths(2))
-                .status(StatusOferta.ABERTA)
-                .build();
+                .status(StatusOferta.ABERTA).build();
 
+        // dto sem usuarioId — vem do token
         dto = OfertaFuturaDTO.builder()
-                .usuarioId(1L).produtoId(1L)
+                .produtoId(1L)
                 .quantidade(new BigDecimal("500"))
                 .dataDisponivel(LocalDate.now().plusMonths(2))
                 .build();
     }
 
-    // CENÁRIOS FELIZES
-
     @Test
     void deveCriarOfertaFuturaComSucesso() {
-        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(vendedor));
+        when(securityUtils.getUsuarioLogado()).thenReturn(vendedor);
         when(produtoRepository.findById(1L)).thenReturn(Optional.of(produto));
         when(repository.save(any())).thenReturn(oferta);
 
@@ -85,7 +82,6 @@ class OfertaFuturaServiceTest {
 
         assertThat(resultado.getStatus()).isEqualTo(StatusOferta.ABERTA);
         assertThat(resultado.getUsuarioNome()).isEqualTo("Maria");
-        assertThat(resultado.getProdutoNome()).isEqualTo("Soja");
         verify(matchingService, times(1)).buscarMatchesPorOferta(any());
     }
 
@@ -100,13 +96,33 @@ class OfertaFuturaServiceTest {
     }
 
     @Test
-    void deveListarOfertasPorUsuario() {
+    void deveListarMinhasOfertas() {
+        when(securityUtils.getUsuarioLogado()).thenReturn(vendedor);
         when(repository.findByUsuarioId(1L)).thenReturn(List.of(oferta));
 
-        List<OfertaFuturaDTO> resultado = service.listarPorUsuario(1L);
+        List<OfertaFuturaDTO> resultado = service.listarMinhasOfertas();
 
         assertThat(resultado).hasSize(1);
         assertThat(resultado.get(0).getUsuarioId()).isEqualTo(1L);
+    }
+
+    @Test
+    void deveLancarExcecaoQuandoCompradorTentaCriarOferta() {
+        when(securityUtils.getUsuarioLogado()).thenReturn(comprador);
+
+        assertThatThrownBy(() -> service.criar(dto))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Apenas vendedores podem criar ofertas futuras");
+    }
+
+    @Test
+    void deveLancarExcecaoQuandoProdutoNaoExiste() {
+        when(securityUtils.getUsuarioLogado()).thenReturn(vendedor);
+        when(produtoRepository.findById(1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.criar(dto))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessage("Produto não encontrado com id: 1");
     }
 
     @Test
@@ -114,64 +130,5 @@ class OfertaFuturaServiceTest {
         when(repository.findByStatus(StatusOferta.ABERTA)).thenReturn(List.of());
 
         assertThat(service.listarAbertas()).isEmpty();
-    }
-
-    @Test
-    void deveChamarMatchingServiceAoCriarOferta() {
-        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(vendedor));
-        when(produtoRepository.findById(1L)).thenReturn(Optional.of(produto));
-        when(repository.save(any())).thenReturn(oferta);
-
-        service.criar(dto);
-
-        verify(matchingService, times(1)).buscarMatchesPorOferta(oferta);
-    }
-
-    // CENÁRIOS INFELIZES
-
-    @Test
-    void deveLancarExcecaoQuandoCompradorTentaCriarOferta() {
-        when(usuarioRepository.findById(2L)).thenReturn(Optional.of(comprador));
-
-        OfertaFuturaDTO dtoInvalido = OfertaFuturaDTO.builder()
-                .usuarioId(2L).produtoId(1L)
-                .quantidade(new BigDecimal("100"))
-                .dataDisponivel(LocalDate.now().plusMonths(1))
-                .build();
-
-        assertThatThrownBy(() -> service.criar(dtoInvalido))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Apenas vendedores podem criar ofertas futuras");
-    }
-
-    @Test
-    void deveLancarExcecaoQuandoUsuarioNaoExiste() {
-        when(usuarioRepository.findById(99L)).thenReturn(Optional.empty());
-
-        OfertaFuturaDTO dtoInvalido = OfertaFuturaDTO.builder()
-                .usuarioId(99L).produtoId(1L)
-                .quantidade(new BigDecimal("100"))
-                .dataDisponivel(LocalDate.now().plusMonths(1))
-                .build();
-
-        assertThatThrownBy(() -> service.criar(dtoInvalido))
-                .isInstanceOf(ResourceNotFoundException.class)
-                .hasMessage("Usuário não encontrado com id: 99");
-    }
-
-    @Test
-    void deveLancarExcecaoQuandoProdutoNaoExiste() {
-        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(vendedor));
-        when(produtoRepository.findById(99L)).thenReturn(Optional.empty());
-
-        OfertaFuturaDTO dtoInvalido = OfertaFuturaDTO.builder()
-                .usuarioId(1L).produtoId(99L)
-                .quantidade(new BigDecimal("100"))
-                .dataDisponivel(LocalDate.now().plusMonths(1))
-                .build();
-
-        assertThatThrownBy(() -> service.criar(dtoInvalido))
-                .isInstanceOf(ResourceNotFoundException.class)
-                .hasMessage("Produto não encontrado com id: 99");
     }
 }

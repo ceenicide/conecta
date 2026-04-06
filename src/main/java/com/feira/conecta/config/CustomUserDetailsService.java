@@ -20,12 +20,11 @@ public class CustomUserDetailsService implements UserDetailsService {
     @Override
     public UserDetails loadUserByUsername(String telefone) throws UsernameNotFoundException {
         Usuario usuario = usuarioRepository.findByTelefone(telefone)
-                .orElseThrow(() -> new UsernameNotFoundException(
-                        "Usuário não encontrado com telefone: " + telefone));
+                .orElseThrow(() -> new UsernameNotFoundException("Usuário não encontrado"));
 
         return User.builder()
                 .username(usuario.getTelefone())
-                .password("")
+                .password(usuario.getSenha())
                 .roles(usuario.getTipo().name())
                 .build();
     }

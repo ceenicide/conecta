@@ -32,19 +32,23 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                    .requestMatchers("/auth/**").permitAll()
-                    .requestMatchers(HttpMethod.GET, "/produtos/**").permitAll()
-                    .requestMatchers(HttpMethod.GET, "/anuncios/**").permitAll()
-                    .requestMatchers(HttpMethod.GET, "/ofertas-futuras/**").permitAll()
-                    .requestMatchers(HttpMethod.GET, "/demandas/**").permitAll()
-                    .requestMatchers(HttpMethod.GET, "/matchings/**").permitAll()
-                    .requestMatchers(
-                            "/swagger-ui/**",
-                            "/swagger-ui.html",
-                            "/v3/api-docs/**"
-                    ).permitAll()
-                    .anyRequest().authenticated()
-            )
+                        // Auth pública
+                        .requestMatchers("/auth/**").permitAll()
+                        // Swagger público
+                        .requestMatchers(
+                                "/swagger-ui/**",
+                                "/swagger-ui.html",
+                                "/v3/api-docs/**"
+                        ).permitAll()
+                        // Leitura pública de catálogo
+                        .requestMatchers(HttpMethod.GET, "/produtos/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/anuncios/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/ofertas-futuras").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/demandas").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/matchings/**").permitAll()
+                        // Tudo mais exige autenticação
+                        .anyRequest().authenticated()
+                )
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }
