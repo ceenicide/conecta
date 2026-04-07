@@ -2,7 +2,11 @@ package com.feira.conecta.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Getter
 @Setter
@@ -19,4 +23,8 @@ public class ProdutoDTO {
 
     @Size(max = 255, message = "Descrição deve ter no máximo 255 caracteres")
     private String descricao;
+
+    // FIX: Expõe o dono do produto na resposta (somente leitura, nunca lido no input)
+    private Long usuarioId;
+    private String usuarioNome;
 }

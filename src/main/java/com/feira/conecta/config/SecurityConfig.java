@@ -40,12 +40,20 @@ public class SecurityConfig {
                                 "/swagger-ui.html",
                                 "/v3/api-docs/**"
                         ).permitAll()
-                        // Leitura pública de catálogo
+                        // Leitura pública de catálogo (somente GET de listagem e detalhe)
                         .requestMatchers(HttpMethod.GET, "/produtos/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/anuncios/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/ofertas-futuras").permitAll()
                         .requestMatchers(HttpMethod.GET, "/demandas").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/matchings/**").permitAll()
+
+                        //  FIX: /matchings/** removido da lista pública.
+                        // Antes: GET /matchings/** era público, mas PATCH /matchings/{id}/aceitar
+                        // e PATCH /matchings/{id}/recusar também passavam sem autenticação
+                        // porque o Spring avaliava a regra de GET e, como PATCH não batia,
+                        // caía no .anyRequest().authenticated() — MAS o MatchingController
+                        // não tinha @SecurityRequirement, deixando a intenção ambígua e
+                        // arriscada. Agora todos os endpoints de /matchings exigem token.
+
                         // Tudo mais exige autenticação
                         .anyRequest().authenticated()
                 )
