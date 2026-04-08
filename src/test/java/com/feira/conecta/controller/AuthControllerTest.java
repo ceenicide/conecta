@@ -23,9 +23,9 @@ import com.feira.conecta.repository.UsuarioRepository;
 @ExtendWith(MockitoExtension.class)
 class AuthControllerTest {
 
-    @Mock private UsuarioRepository usuarioRepository;
-    @Mock private JwtService jwtService;
-    @Mock private PasswordEncoder passwordEncoder;
+@Mock private UsuarioRepository usuarioRepository;
+@Mock private JwtService jwtService;
+@Mock private PasswordEncoder passwordEncoder;
 
     @InjectMocks
     private AuthController controller;
@@ -120,8 +120,6 @@ class AuthControllerTest {
         AuthDTO dto = AuthDTO.builder()
                 .nome("Maria").telefone("11111111111")
                 .tipo(TipoUsuario.VENDEDOR).build(); // sem senha
-
-        when(usuarioRepository.existsByTelefone("11111111111")).thenReturn(false);
 
         assertThatThrownBy(() -> controller.registrar(dto))
                 .isInstanceOf(IllegalArgumentException.class)

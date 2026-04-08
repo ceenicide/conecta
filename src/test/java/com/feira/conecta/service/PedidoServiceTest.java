@@ -70,7 +70,7 @@ class PedidoServiceTest {
                 .quantidade(new BigDecimal("10"))
                 .status(StatusPedido.PENDENTE).build();
 
-        // dto de entrada: sem compradorId (vem do token)
+       //  dto de entrada: sem compradorId (vem do token)
         dto = PedidoDTO.builder()
                 .anuncioId(1L)
                 .quantidade(new BigDecimal("10")).build();

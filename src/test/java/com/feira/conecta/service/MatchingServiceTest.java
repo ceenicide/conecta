@@ -19,6 +19,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.feira.conecta.config.SecurityUtils;
 import com.feira.conecta.domain.Demanda;
 import com.feira.conecta.domain.Matching;
 import com.feira.conecta.domain.OfertaFutura;
@@ -40,12 +41,15 @@ class MatchingServiceTest {
     @Mock private MatchingRepository matchingRepository;
     @Mock private OfertaFuturaRepository ofertaRepository;
     @Mock private DemandaRepository demandaRepository;
+    // FIX: SecurityUtils agora é injetado no MatchingService para verificar ownership
+    @Mock private SecurityUtils securityUtils;
 
     @InjectMocks
     private MatchingService service;
 
     private Usuario vendedor;
     private Usuario comprador;
+    private Usuario terceiroUsuario;
     private Produto produto;
     private OfertaFutura oferta;
     private Demanda demanda;
@@ -59,8 +63,11 @@ class MatchingServiceTest {
         comprador = Usuario.builder()
                 .id(2L).nome("Carlos").tipo(TipoUsuario.COMPRADOR).build();
 
+        terceiroUsuario = Usuario.builder()
+                .id(3L).nome("Outro").tipo(TipoUsuario.COMPRADOR).build();
+
         produto = Produto.builder()
-                .id(1L).nome("Soja").build();
+                .id(1L).nome("Soja").usuario(vendedor).build();
 
         oferta = OfertaFutura.builder()
                 .id(1L).usuario(vendedor).produto(produto)
@@ -82,7 +89,9 @@ class MatchingServiceTest {
                 .build();
     }
 
-    // CENÁRIOS FELIZES
+    // ========================
+    // BUSCAR MATCHES
+    // ========================
 
     @Test
     void deveCriarMatchingQuandoOfertaEDemandaSaoCompativeis() {
@@ -107,56 +116,6 @@ class MatchingServiceTest {
         service.buscarMatchesPorDemanda(demanda);
 
         verify(matchingRepository, times(1)).save(any(Matching.class));
-    }
-
-    @Test
-    void deveAceitarMatchingEFecharOfertaEAtenderDemanda() {
-        when(matchingRepository.findById(1L)).thenReturn(Optional.of(matching));
-        when(matchingRepository.save(any())).thenReturn(matching);
-
-        MatchingDTO resultado = service.aceitar(1L);
-
-        assertThat(resultado.getStatus()).isEqualTo(StatusMatching.ACEITO);
-        assertThat(oferta.getStatus()).isEqualTo(StatusOferta.FECHADA);
-        assertThat(demanda.getStatus()).isEqualTo(StatusDemanda.ATENDIDA);
-        verify(ofertaRepository, times(1)).save(oferta);
-        verify(demandaRepository, times(1)).save(demanda);
-    }
-
-    @Test
-    void deveRecusarMatchingSemAlterarOfertaEDemanda() {
-        when(matchingRepository.findById(1L)).thenReturn(Optional.of(matching));
-        when(matchingRepository.save(any())).thenReturn(
-                Matching.builder().id(1L).oferta(oferta).demanda(demanda)
-                        .status(StatusMatching.RECUSADO).build());
-
-        MatchingDTO resultado = service.recusar(1L);
-
-        assertThat(resultado.getStatus()).isEqualTo(StatusMatching.RECUSADO);
-        assertThat(oferta.getStatus()).isEqualTo(StatusOferta.ABERTA);
-        assertThat(demanda.getStatus()).isEqualTo(StatusDemanda.PROCURANDO);
-        verify(ofertaRepository, never()).save(any());
-        verify(demandaRepository, never()).save(any());
-    }
-
-    @Test
-    void deveListarMatchingsPorOferta() {
-        when(matchingRepository.findByOfertaId(1L)).thenReturn(List.of(matching));
-
-        List<MatchingDTO> resultado = service.listarPorOferta(1L);
-
-        assertThat(resultado).hasSize(1);
-        assertThat(resultado.get(0).getOfertaId()).isEqualTo(1L);
-    }
-
-    @Test
-    void deveListarMatchingsPorDemanda() {
-        when(matchingRepository.findByDemandaId(1L)).thenReturn(List.of(matching));
-
-        List<MatchingDTO> resultado = service.listarPorDemanda(1L);
-
-        assertThat(resultado).hasSize(1);
-        assertThat(resultado.get(0).getDemandaId()).isEqualTo(1L);
     }
 
     @Test
@@ -187,11 +146,99 @@ class MatchingServiceTest {
         verify(matchingRepository, never()).save(any());
     }
 
-    // CENÁRIOS INFELIZES
+    // ========================
+    // LISTAR
+    // ========================
+
+    @Test
+    void deveListarMatchingsPorOferta() {
+        when(securityUtils.getUsuarioLogado()).thenReturn(vendedor);
+        when(ofertaRepository.findById(1L)).thenReturn(Optional.of(oferta));
+        when(matchingRepository.findByOfertaId(1L)).thenReturn(List.of(matching));
+
+        List<MatchingDTO> resultado = service.listarPorOferta(1L);
+
+        assertThat(resultado).hasSize(1);
+        assertThat(resultado.get(0).getOfertaId()).isEqualTo(1L);
+    }
+
+    @Test
+    void deveLancarExcecaoQuandoOutroUsuarioTentaVerMatchingsDaOferta() {
+        when(securityUtils.getUsuarioLogado()).thenReturn(terceiroUsuario);
+        when(ofertaRepository.findById(1L)).thenReturn(Optional.of(oferta));
+
+        assertThatThrownBy(() -> service.listarPorOferta(1L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Você não tem permissão para ver os matches desta oferta");
+    }
+
+    @Test
+    void deveListarMatchingsPorDemanda() {
+        when(securityUtils.getUsuarioLogado()).thenReturn(comprador);
+        when(demandaRepository.findById(1L)).thenReturn(Optional.of(demanda));
+        when(matchingRepository.findByDemandaId(1L)).thenReturn(List.of(matching));
+
+        List<MatchingDTO> resultado = service.listarPorDemanda(1L);
+
+        assertThat(resultado).hasSize(1);
+        assertThat(resultado.get(0).getDemandaId()).isEqualTo(1L);
+    }
+
+    @Test
+    void deveLancarExcecaoQuandoOutroUsuarioTentaVerMatchingsDaDemanda() {
+        when(securityUtils.getUsuarioLogado()).thenReturn(terceiroUsuario);
+        when(demandaRepository.findById(1L)).thenReturn(Optional.of(demanda));
+
+        assertThatThrownBy(() -> service.listarPorDemanda(1L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Você não tem permissão para ver os matches desta demanda");
+    }
+
+    // ========================
+    // ACEITAR — com ownership
+    // ========================
+
+    @Test
+    void deveAceitarMatchingEFecharOfertaEAtenderDemanda() {
+        when(securityUtils.getUsuarioLogado()).thenReturn(vendedor);
+        when(matchingRepository.findById(1L)).thenReturn(Optional.of(matching));
+        when(matchingRepository.save(any())).thenReturn(matching);
+
+        MatchingDTO resultado = service.aceitar(1L);
+
+        assertThat(resultado.getStatus()).isEqualTo(StatusMatching.ACEITO);
+        assertThat(oferta.getStatus()).isEqualTo(StatusOferta.FECHADA);
+        assertThat(demanda.getStatus()).isEqualTo(StatusDemanda.ATENDIDA);
+        verify(ofertaRepository, times(1)).save(oferta);
+        verify(demandaRepository, times(1)).save(demanda);
+    }
+
+    // FIX: comprador não pode aceitar matching — apenas o vendedor dono da oferta
+    @Test
+    void deveLancarExcecaoQuandoCompradorTentaAceitarMatching() {
+        when(securityUtils.getUsuarioLogado()).thenReturn(comprador);
+        when(matchingRepository.findById(1L)).thenReturn(Optional.of(matching));
+
+        assertThatThrownBy(() -> service.aceitar(1L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Apenas o vendedor dono da oferta pode aceitar este matching");
+    }
+
+    // FIX: terceiro usuário não pode aceitar matching de ninguém
+    @Test
+    void deveLancarExcecaoQuandoTerceiroTentaAceitarMatching() {
+        when(securityUtils.getUsuarioLogado()).thenReturn(terceiroUsuario);
+        when(matchingRepository.findById(1L)).thenReturn(Optional.of(matching));
+
+        assertThatThrownBy(() -> service.aceitar(1L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Apenas o vendedor dono da oferta pode aceitar este matching");
+    }
 
     @Test
     void deveLancarExcecaoAoAceitarMatchingNaoPendente() {
         matching.setStatus(StatusMatching.ACEITO);
+        when(securityUtils.getUsuarioLogado()).thenReturn(vendedor);
         when(matchingRepository.findById(1L)).thenReturn(Optional.of(matching));
 
         assertThatThrownBy(() -> service.aceitar(1L))
@@ -200,21 +247,69 @@ class MatchingServiceTest {
     }
 
     @Test
-    void deveLancarExcecaoAoRecusarMatchingNaoPendente() {
-        matching.setStatus(StatusMatching.RECUSADO);
-        when(matchingRepository.findById(1L)).thenReturn(Optional.of(matching));
-
-        assertThatThrownBy(() -> service.recusar(1L))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Apenas matchings pendentes podem ser recusados");
-    }
-
-    @Test
-    void deveLancarExcecaoQuandoMatchingNaoEncontrado() {
+    void deveLancarExcecaoQuandoMatchingNaoEncontradoAoAceitar() {
+        when(securityUtils.getUsuarioLogado()).thenReturn(vendedor);
         when(matchingRepository.findById(99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.aceitar(99L))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessage("Matching não encontrado com id: 99");
+    }
+
+    // ========================
+    // RECUSAR — com ownership
+    // ========================
+
+    @Test
+    void deveRecusarMatchingComoVendedorSemAlterarOfertaEDemanda() {
+        when(securityUtils.getUsuarioLogado()).thenReturn(vendedor);
+        when(matchingRepository.findById(1L)).thenReturn(Optional.of(matching));
+        when(matchingRepository.save(any())).thenReturn(
+                Matching.builder().id(1L).oferta(oferta).demanda(demanda)
+                        .status(StatusMatching.RECUSADO).build());
+
+        MatchingDTO resultado = service.recusar(1L);
+
+        assertThat(resultado.getStatus()).isEqualTo(StatusMatching.RECUSADO);
+        assertThat(oferta.getStatus()).isEqualTo(StatusOferta.ABERTA);
+        assertThat(demanda.getStatus()).isEqualTo(StatusDemanda.PROCURANDO);
+        verify(ofertaRepository, never()).save(any());
+        verify(demandaRepository, never()).save(any());
+    }
+
+    // FIX: o comprador dono da demanda também pode recusar
+    @Test
+    void deveRecusarMatchingComoCompradorDaDemanda() {
+        when(securityUtils.getUsuarioLogado()).thenReturn(comprador);
+        when(matchingRepository.findById(1L)).thenReturn(Optional.of(matching));
+        when(matchingRepository.save(any())).thenReturn(
+                Matching.builder().id(1L).oferta(oferta).demanda(demanda)
+                        .status(StatusMatching.RECUSADO).build());
+
+        MatchingDTO resultado = service.recusar(1L);
+
+        assertThat(resultado.getStatus()).isEqualTo(StatusMatching.RECUSADO);
+    }
+
+    // FIX: terceiro usuário não pode recusar matching alheio
+    @Test
+    void deveLancarExcecaoQuandoTerceiroTentaRecusarMatching() {
+        when(securityUtils.getUsuarioLogado()).thenReturn(terceiroUsuario);
+        when(matchingRepository.findById(1L)).thenReturn(Optional.of(matching));
+
+        assertThatThrownBy(() -> service.recusar(1L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Você não tem permissão para recusar este matching");
+    }
+
+    @Test
+    void deveLancarExcecaoAoRecusarMatchingNaoPendente() {
+        matching.setStatus(StatusMatching.RECUSADO);
+        when(securityUtils.getUsuarioLogado()).thenReturn(vendedor);
+        when(matchingRepository.findById(1L)).thenReturn(Optional.of(matching));
+
+        assertThatThrownBy(() -> service.recusar(1L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Apenas matchings pendentes podem ser recusados");
     }
 }
