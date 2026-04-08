@@ -28,7 +28,11 @@ public class UsuarioDTO {
     private String nome;
 
     @NotBlank(message = "Telefone é obrigatório")
-    @Pattern(regexp = "^\\+?[0-9]{10,15}$", message = "Telefone inválido")
+    // FIX: mesmo padrão do AuthDTO — (99) 999999999
+    @Pattern(
+        regexp = "^\\(\\d{2}\\) \\d{9}$",
+        message = "Telefone deve estar no formato (99) 999999999"
+    )
     private String telefone;
 
     @NotNull(message = "Tipo é obrigatório")

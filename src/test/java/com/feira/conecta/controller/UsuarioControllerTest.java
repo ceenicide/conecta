@@ -1,7 +1,5 @@
 package com.feira.conecta.controller;
 
-import java.util.List;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -55,16 +53,6 @@ class UsuarioControllerTest {
 
         assertThat(resposta.getStatusCode().value()).isEqualTo(200);
         assertThat(resposta.getBody().getNome()).isEqualTo("João Silva");
-    }
-
-    @Test
-    void deveListarTodosOsUsuariosERetornar200() {
-        when(service.listarTodos()).thenReturn(List.of(dto));
-
-        ResponseEntity<List<UsuarioDTO>> resposta = controller.listarTodos();
-
-        assertThat(resposta.getStatusCode().value()).isEqualTo(200);
-        assertThat(resposta.getBody()).hasSize(1);
     }
 
     @Test

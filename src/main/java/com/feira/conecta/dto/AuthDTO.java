@@ -3,7 +3,7 @@ package com.feira.conecta.dto;
 import com.feira.conecta.domain.TipoUsuario;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -19,6 +19,12 @@ import lombok.Setter;
 public class AuthDTO {
 
     @NotBlank(message = "Telefone é obrigatório")
+    // FIX: formato brasileiro (99) 999999999 — 9 dígitos no número (celular com 9)
+    // Aceita exatamente: (XX) XXXXXXXXX
+    @Pattern(
+        regexp = "^\\(\\d{2}\\) \\d{9}$",
+        message = "Telefone deve estar no formato (99) 999999999"
+    )
     private String telefone;
 
     private String nome;
