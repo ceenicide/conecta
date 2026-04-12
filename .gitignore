@@ -10,4 +10,4 @@
 # Arquivos de configuração com senhas reais
 application-local.yml
 application-local.yaml
- 
+target/
