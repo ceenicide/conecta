@@ -1,0 +1,13 @@
+ 
+# ============================================================
+# CREDENCIAIS — NUNCA commitar estes arquivos
+# ============================================================
+.env
+.env.local
+.env.*.local
+*.env
+ 
+# Arquivos de configuração com senhas reais
+application-local.yml
+application-local.yaml
+ 
