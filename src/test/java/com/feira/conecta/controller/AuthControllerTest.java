@@ -1,7 +1,5 @@
 package com.feira.conecta.controller;
 
-import java.util.Optional;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.BeforeEach;
@@ -12,117 +10,128 @@ import org.mockito.Mock;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.crypto.password.PasswordEncoder;
 
-import com.feira.conecta.config.JwtService;
 import com.feira.conecta.domain.TipoUsuario;
-import com.feira.conecta.domain.Usuario;
-import com.feira.conecta.dto.AuthDTO;
-import com.feira.conecta.repository.UsuarioRepository;
+import com.feira.conecta.dto.auth.LoginRequest;
+import com.feira.conecta.dto.auth.LoginResponse;
+import com.feira.conecta.dto.auth.RegisterRequest;
+import com.feira.conecta.service.AuthService;
 
+/**
+ * Testes do AuthController após refatoração.
+ *
+ * MUDANÇAS em relação ao teste anterior:
+ *
+ * ANTES: controller injetava UsuarioRepository, JwtService e PasswordEncoder
+ *   diretamente — os mocks refletiam isso.
+ *
+ * DEPOIS: controller delega tudo ao AuthService — o único mock necessário
+ *   é AuthService. O teste do controller não precisa saber como o service
+ *   implementa login/registro internamente: isso é responsabilidade dos
+ *   testes do AuthService.
+ *
+ * Isso também corrige o status code: registro agora retorna 201 Created.
+ */
 @ExtendWith(MockitoExtension.class)
 class AuthControllerTest {
 
-@Mock private UsuarioRepository usuarioRepository;
-@Mock private JwtService jwtService;
-@Mock private PasswordEncoder passwordEncoder;
+    @Mock private AuthService authService;
 
     @InjectMocks
     private AuthController controller;
 
-    private Usuario usuario;
+    private LoginResponse loginResponse;
+    private LoginResponse registerResponse;
 
     @BeforeEach
     void setup() {
-        usuario = Usuario.builder()
-                .id(1L).nome("Maria Silva").telefone("11111111111")
-                .senha("$2a$10$hashbcrypt").tipo(TipoUsuario.VENDEDOR).build();
+        loginResponse = new LoginResponse(
+                1L, "Maria Silva", "(11) 999999999",
+                TipoUsuario.VENDEDOR, "token.login"
+        );
+        registerResponse = new LoginResponse(
+                1L, "Maria Silva", "(11) 999999999",
+                TipoUsuario.VENDEDOR, "token.registro"
+        );
+    }
+
+    // ── Registro ────────────────────────────────────────────────────────────
+
+    @Test
+    void deveRegistrarUsuarioERetornar201() {
+        RegisterRequest request = new RegisterRequest(
+                "Maria Silva", "(11) 999999999", "senha123", TipoUsuario.VENDEDOR
+        );
+        when(authService.registrar(request)).thenReturn(registerResponse);
+
+        ResponseEntity<LoginResponse> resposta = controller.registrar(request);
+
+        // FIX: registro retorna 201 Created, não 200 OK
+        assertThat(resposta.getStatusCode().value()).isEqualTo(201);
+        assertThat(resposta.getBody().token()).isEqualTo("token.registro");
+        assertThat(resposta.getBody().nome()).isEqualTo("Maria Silva");
+        assertThat(resposta.getBody().tipo()).isEqualTo(TipoUsuario.VENDEDOR);
     }
 
     @Test
-    void deveRegistrarUsuarioERetornarToken() {
-        AuthDTO dto = AuthDTO.builder()
-                .nome("Maria Silva").telefone("11111111111")
-                .senha("senha123").tipo(TipoUsuario.VENDEDOR).build();
+    void deveRetornarIdETipoNoRegistro() {
+        RegisterRequest request = new RegisterRequest(
+                "Maria Silva", "(11) 999999999", "senha123", TipoUsuario.VENDEDOR
+        );
+        when(authService.registrar(request)).thenReturn(registerResponse);
 
-        when(usuarioRepository.existsByTelefone("11111111111")).thenReturn(false);
-        when(passwordEncoder.encode("senha123")).thenReturn("$2a$10$hashbcrypt");
-        when(jwtService.gerarToken("11111111111")).thenReturn("token.gerado");
+        ResponseEntity<LoginResponse> resposta = controller.registrar(request);
 
-        ResponseEntity<AuthDTO> resposta = controller.registrar(dto);
-
-        assertThat(resposta.getStatusCode().value()).isEqualTo(200);
-        assertThat(resposta.getBody().getToken()).isEqualTo("token.gerado");
-        assertThat(resposta.getBody().getNome()).isEqualTo("Maria Silva");
+        assertThat(resposta.getBody().id()).isEqualTo(1L);
+        assertThat(resposta.getBody().tipo()).isEqualTo(TipoUsuario.VENDEDOR);
     }
 
     @Test
-    void deveFazerLoginComSenhaCorretaERetornarToken() {
-        AuthDTO dto = AuthDTO.builder()
-                .telefone("11111111111").senha("senha123").build();
+    void deveRepassarExcecaoDoServiceNoRegistro() {
+        RegisterRequest request = new RegisterRequest(
+                "Maria Silva", "(11) 999999999", "senha123", TipoUsuario.VENDEDOR
+        );
+        when(authService.registrar(request))
+                .thenThrow(new IllegalArgumentException("Não foi possível concluir o cadastro"));
 
-        when(usuarioRepository.findByTelefone("11111111111"))
-                .thenReturn(Optional.of(usuario));
-        when(passwordEncoder.matches("senha123", "$2a$10$hashbcrypt")).thenReturn(true);
-        when(jwtService.gerarToken("11111111111")).thenReturn("token.login");
-
-        ResponseEntity<AuthDTO> resposta = controller.login(dto);
-
-        assertThat(resposta.getStatusCode().value()).isEqualTo(200);
-        assertThat(resposta.getBody().getToken()).isEqualTo("token.login");
-    }
-
-    @Test
-    void deveLancarExcecaoQuandoTelefoneJaCadastradoNoRegistro() {
-        AuthDTO dto = AuthDTO.builder()
-                .nome("Maria").telefone("11111111111")
-                .senha("senha123").tipo(TipoUsuario.VENDEDOR).build();
-
-        when(usuarioRepository.existsByTelefone("11111111111")).thenReturn(true);
-
-        // mensagem genérica — não revela que telefone já existe
-        assertThatThrownBy(() -> controller.registrar(dto))
+        assertThatThrownBy(() -> controller.registrar(request))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Não foi possível concluir o cadastro");
     }
 
+    // ── Login ────────────────────────────────────────────────────────────────
+
     @Test
-    void deveLancarExcecaoQuandoTelefoneNaoEncontradoNoLogin() {
-        AuthDTO dto = AuthDTO.builder()
-                .telefone("99999999999").senha("senha123").build();
+    void deveFazerLoginERetornar200() {
+        LoginRequest request = new LoginRequest("(11) 999999999", "senha123");
+        when(authService.login(request)).thenReturn(loginResponse);
 
-        when(usuarioRepository.findByTelefone("99999999999"))
-                .thenReturn(Optional.empty());
+        ResponseEntity<LoginResponse> resposta = controller.login(request);
 
-        // mensagem genérica — não revela se telefone existe
-        assertThatThrownBy(() -> controller.login(dto))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Credenciais inválidas");
+        assertThat(resposta.getStatusCode().value()).isEqualTo(200);
+        assertThat(resposta.getBody().token()).isEqualTo("token.login");
     }
 
     @Test
-    void deveLancarExcecaoQuandoSenhaIncorretaNoLogin() {
-        AuthDTO dto = AuthDTO.builder()
-                .telefone("11111111111").senha("senhaerrada").build();
+    void deveRetornarDadosDoUsuarioNoLogin() {
+        LoginRequest request = new LoginRequest("(11) 999999999", "senha123");
+        when(authService.login(request)).thenReturn(loginResponse);
 
-        when(usuarioRepository.findByTelefone("11111111111"))
-                .thenReturn(Optional.of(usuario));
-        when(passwordEncoder.matches("senhaerrada", "$2a$10$hashbcrypt")).thenReturn(false);
+        ResponseEntity<LoginResponse> resposta = controller.login(request);
 
-        // mesma mensagem do telefone não encontrado — não revela qual campo está errado
-        assertThatThrownBy(() -> controller.login(dto))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Credenciais inválidas");
+        assertThat(resposta.getBody().nome()).isEqualTo("Maria Silva");
+        assertThat(resposta.getBody().telefone()).isEqualTo("(11) 999999999");
+        assertThat(resposta.getBody().tipo()).isEqualTo(TipoUsuario.VENDEDOR);
     }
 
     @Test
-    void deveLancarExcecaoQuandoRegistroSemSenha() {
-        AuthDTO dto = AuthDTO.builder()
-                .nome("Maria").telefone("11111111111")
-                .tipo(TipoUsuario.VENDEDOR).build(); // sem senha
+    void deveRepassarExcecaoDeCredenciaisInvalidasDoService() {
+        LoginRequest request = new LoginRequest("(99) 999999999", "senhaerrada");
+        when(authService.login(request))
+                .thenThrow(new IllegalArgumentException("Credenciais inválidas"));
 
-        assertThatThrownBy(() -> controller.registrar(dto))
+        assertThatThrownBy(() -> controller.login(request))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Senha é obrigatória no registro");
+                .hasMessage("Credenciais inválidas");
     }
 }
