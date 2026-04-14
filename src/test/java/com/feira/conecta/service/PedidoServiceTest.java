@@ -25,7 +25,8 @@ import com.feira.conecta.domain.StatusAnuncio;
 import com.feira.conecta.domain.StatusPedido;
 import com.feira.conecta.domain.TipoUsuario;
 import com.feira.conecta.domain.Usuario;
-import com.feira.conecta.dto.PedidoDTO;
+import com.feira.conecta.dto.PedidoRequest;
+import com.feira.conecta.dto.PedidoResponse;
 import com.feira.conecta.exception.ResourceNotFoundException;
 import com.feira.conecta.repository.AnuncioRepository;
 import com.feira.conecta.repository.PedidoRepository;
@@ -45,16 +46,16 @@ class PedidoServiceTest {
     private Produto produto;
     private Anuncio anuncio;
     private Pedido pedido;
-    private PedidoDTO dto;
+    private PedidoRequest request;
 
     @BeforeEach
     void setup() {
         vendedor = Usuario.builder()
-                .id(1L).nome("Maria").telefone("11999990000")
+                .id(1L).nome("Maria").telefone("(11) 999990000")
                 .senha("hash").tipo(TipoUsuario.VENDEDOR).build();
 
         comprador = Usuario.builder()
-                .id(2L).nome("Carlos").telefone("11888880000")
+                .id(2L).nome("Carlos").telefone("(11) 888880000")
                 .senha("hash").tipo(TipoUsuario.COMPRADOR).build();
 
         produto = Produto.builder().id(1L).nome("Soja").build();
@@ -70,10 +71,8 @@ class PedidoServiceTest {
                 .quantidade(new BigDecimal("10"))
                 .status(StatusPedido.PENDENTE).build();
 
-       //  dto de entrada: sem compradorId (vem do token)
-        dto = PedidoDTO.builder()
-                .anuncioId(1L)
-                .quantidade(new BigDecimal("10")).build();
+        // Request: só anuncioId e quantidade — compradorId vem do token
+        request = new PedidoRequest(1L, new BigDecimal("10"));
     }
 
     @Test
@@ -82,11 +81,11 @@ class PedidoServiceTest {
         when(anuncioRepository.findById(1L)).thenReturn(Optional.of(anuncio));
         when(pedidoRepository.save(any())).thenReturn(pedido);
 
-        PedidoDTO resultado = service.criar(dto);
+        PedidoResponse resultado = service.criar(request);
 
-        assertThat(resultado.getStatus()).isEqualTo(StatusPedido.PENDENTE);
-        assertThat(resultado.getCompradorNome()).isEqualTo("Carlos");
-        assertThat(resultado.getVendedorNome()).isEqualTo("Maria");
+        assertThat(resultado.status()).isEqualTo(StatusPedido.PENDENTE);
+        assertThat(resultado.compradorNome()).isEqualTo("Carlos");
+        assertThat(resultado.vendedorNome()).isEqualTo("Maria");
         verify(pedidoRepository, times(1)).save(any());
     }
 
@@ -95,10 +94,10 @@ class PedidoServiceTest {
         when(securityUtils.getUsuarioLogado()).thenReturn(comprador);
         when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
 
-        PedidoDTO resultado = service.buscarPorId(1L);
+        PedidoResponse resultado = service.buscarPorId(1L);
 
-        assertThat(resultado.getId()).isEqualTo(1L);
-        assertThat(resultado.getQuantidade()).isEqualByComparingTo("10");
+        assertThat(resultado.id()).isEqualTo(1L);
+        assertThat(resultado.quantidade()).isEqualByComparingTo("10");
     }
 
     @Test
@@ -106,9 +105,9 @@ class PedidoServiceTest {
         when(securityUtils.getUsuarioLogado()).thenReturn(vendedor);
         when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
 
-        PedidoDTO resultado = service.buscarPorId(1L);
+        PedidoResponse resultado = service.buscarPorId(1L);
 
-        assertThat(resultado.getId()).isEqualTo(1L);
+        assertThat(resultado.id()).isEqualTo(1L);
     }
 
     @Test
@@ -116,10 +115,10 @@ class PedidoServiceTest {
         when(securityUtils.getUsuarioLogado()).thenReturn(comprador);
         when(pedidoRepository.findByCompradorId(2L)).thenReturn(List.of(pedido));
 
-        List<PedidoDTO> resultado = service.listarMeusPedidos();
+        List<PedidoResponse> resultado = service.listarMeusPedidos();
 
         assertThat(resultado).hasSize(1);
-        assertThat(resultado.get(0).getCompradorId()).isEqualTo(2L);
+        assertThat(resultado.get(0).compradorId()).isEqualTo(2L);
     }
 
     @Test
@@ -133,9 +132,9 @@ class PedidoServiceTest {
         when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
         when(pedidoRepository.save(any())).thenReturn(confirmado);
 
-        PedidoDTO resultado = service.confirmar(1L);
+        PedidoResponse resultado = service.confirmar(1L);
 
-        assertThat(resultado.getStatus()).isEqualTo(StatusPedido.CONFIRMADO);
+        assertThat(resultado.status()).isEqualTo(StatusPedido.CONFIRMADO);
         assertThat(anuncio.getStatus()).isEqualTo(StatusAnuncio.VENDIDO);
         verify(anuncioRepository, times(1)).save(anuncio);
     }
@@ -152,16 +151,16 @@ class PedidoServiceTest {
         when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
         when(pedidoRepository.save(any())).thenReturn(finalizado);
 
-        PedidoDTO resultado = service.finalizar(1L);
+        PedidoResponse resultado = service.finalizar(1L);
 
-        assertThat(resultado.getStatus()).isEqualTo(StatusPedido.FINALIZADO);
+        assertThat(resultado.status()).isEqualTo(StatusPedido.FINALIZADO);
     }
 
     @Test
     void deveLancarExcecaoQuandoVendedorTentaFazerPedido() {
         when(securityUtils.getUsuarioLogado()).thenReturn(vendedor);
 
-        assertThatThrownBy(() -> service.criar(dto))
+        assertThatThrownBy(() -> service.criar(request))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Apenas compradores podem fazer pedidos");
     }
@@ -172,7 +171,7 @@ class PedidoServiceTest {
         when(securityUtils.getUsuarioLogado()).thenReturn(comprador);
         when(anuncioRepository.findById(1L)).thenReturn(Optional.of(anuncio));
 
-        assertThatThrownBy(() -> service.criar(dto))
+        assertThatThrownBy(() -> service.criar(request))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Este anúncio não está disponível");
     }
@@ -183,20 +182,18 @@ class PedidoServiceTest {
         when(securityUtils.getUsuarioLogado()).thenReturn(comprador);
         when(anuncioRepository.findById(1L)).thenReturn(Optional.of(anuncio));
 
-        assertThatThrownBy(() -> service.criar(dto))
+        assertThatThrownBy(() -> service.criar(request))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Você não pode fazer pedido do seu próprio anúncio");
     }
 
     @Test
     void deveLancarExcecaoQuandoQuantidadeSuperiorAoDisponivel() {
-        PedidoDTO dtoExcesso = PedidoDTO.builder()
-                .anuncioId(1L).quantidade(new BigDecimal("999")).build();
-
+        PedidoRequest excesso = new PedidoRequest(1L, new BigDecimal("999"));
         when(securityUtils.getUsuarioLogado()).thenReturn(comprador);
         when(anuncioRepository.findById(1L)).thenReturn(Optional.of(anuncio));
 
-        assertThatThrownBy(() -> service.criar(dtoExcesso))
+        assertThatThrownBy(() -> service.criar(excesso))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Quantidade solicitada maior que a disponível no anúncio");
     }
@@ -236,7 +233,7 @@ class PedidoServiceTest {
     @Test
     void deveLancarExcecaoAoBuscarPedidoDeOutroUsuario() {
         Usuario outro = Usuario.builder()
-                .id(99L).nome("Outro").telefone("99999999999")
+                .id(99L).nome("Outro").telefone("(99) 999999999")
                 .senha("hash").tipo(TipoUsuario.COMPRADOR).build();
 
         when(securityUtils.getUsuarioLogado()).thenReturn(outro);

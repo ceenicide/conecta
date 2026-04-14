@@ -18,7 +18,8 @@ import org.springframework.http.ResponseEntity;
 
 import com.feira.conecta.domain.StatusDemanda;
 import com.feira.conecta.domain.StatusOferta;
-import com.feira.conecta.dto.DemandaDTO;
+import com.feira.conecta.dto.DemandaRequest;
+import com.feira.conecta.dto.DemandaResponse;
 import com.feira.conecta.dto.OfertaFuturaDTO;
 import com.feira.conecta.exception.ResourceNotFoundException;
 import com.feira.conecta.service.DemandaService;
@@ -31,17 +32,19 @@ class DemandaControllerTest {
     @InjectMocks
     private DemandaController controller;
 
-    private DemandaDTO dto;
+    private DemandaRequest request;
+    private DemandaResponse response;
     private OfertaFuturaDTO ofertaDto;
 
     @BeforeEach
     void setup() {
-        dto = DemandaDTO.builder()
-                .id(1L).compradorId(2L).compradorNome("Carlos")
-                .produtoId(1L).produtoNome("Soja")
-                .quantidade(new BigDecimal("200"))
-                .dataLimite(LocalDate.of(2026, 5, 13))
-                .status(StatusDemanda.PROCURANDO).build();
+        request = new DemandaRequest(1L, new BigDecimal("200"), LocalDate.of(2026, 5, 13));
+
+        response = new DemandaResponse(
+                1L, 2L, "Carlos", 1L, "Soja",
+                new BigDecimal("200"), LocalDate.of(2026, 5, 13),
+                StatusDemanda.PROCURANDO
+        );
 
         ofertaDto = OfertaFuturaDTO.builder()
                 .id(1L).usuarioId(1L).usuarioNome("Maria")
@@ -52,21 +55,21 @@ class DemandaControllerTest {
     }
 
     @Test
-    void deveCriarDemandaERetornar200() {
-        when(service.criar(any())).thenReturn(dto);
+    void deveCriarDemandaERetornar201() {
+        when(service.criar(any())).thenReturn(response);
 
-        ResponseEntity<DemandaDTO> resposta = controller.criar(dto);
+        ResponseEntity<DemandaResponse> resposta = controller.criar(request);
 
-        assertThat(resposta.getStatusCode().value()).isEqualTo(200);
-        assertThat(resposta.getBody().getStatus()).isEqualTo(StatusDemanda.PROCURANDO);
-        assertThat(resposta.getBody().getCompradorNome()).isEqualTo("Carlos");
+        assertThat(resposta.getStatusCode().value()).isEqualTo(201);
+        assertThat(resposta.getBody().status()).isEqualTo(StatusDemanda.PROCURANDO);
+        assertThat(resposta.getBody().compradorNome()).isEqualTo("Carlos");
     }
 
     @Test
     void deveListarDemandasProcurandoERetornar200() {
-        when(service.listarProcurando()).thenReturn(List.of(dto));
+        when(service.listarProcurando()).thenReturn(List.of(response));
 
-        ResponseEntity<List<DemandaDTO>> resposta = controller.listarProcurando();
+        ResponseEntity<List<DemandaResponse>> resposta = controller.listarProcurando();
 
         assertThat(resposta.getStatusCode().value()).isEqualTo(200);
         assertThat(resposta.getBody()).hasSize(1);
@@ -74,17 +77,13 @@ class DemandaControllerTest {
 
     @Test
     void deveListarMinhasDemandasERetornar200() {
-        when(service.listarMinhasDemandas()).thenReturn(List.of(dto));
+        when(service.listarMinhasDemandas()).thenReturn(List.of(response));
 
-        ResponseEntity<List<DemandaDTO>> resposta = controller.listarMinhasDemandas();
+        ResponseEntity<List<DemandaResponse>> resposta = controller.listarMinhasDemandas();
 
         assertThat(resposta.getStatusCode().value()).isEqualTo(200);
         assertThat(resposta.getBody()).hasSize(1);
     }
-
-    // ========================
-    // NOVO: listarOfertasCompativeis
-    // ========================
 
     @Test
     void deveListarOfertasCompativeisERetornar200() {

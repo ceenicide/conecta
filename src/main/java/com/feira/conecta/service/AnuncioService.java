@@ -12,7 +12,8 @@ import com.feira.conecta.domain.Produto;
 import com.feira.conecta.domain.StatusAnuncio;
 import com.feira.conecta.domain.TipoUsuario;
 import com.feira.conecta.domain.Usuario;
-import com.feira.conecta.dto.AnuncioDTO;
+import com.feira.conecta.dto.AnuncioRequest;
+import com.feira.conecta.dto.AnuncioResponse;
 import com.feira.conecta.exception.ResourceNotFoundException;
 import com.feira.conecta.repository.AnuncioRepository;
 import com.feira.conecta.repository.ProdutoRepository;
@@ -26,65 +27,59 @@ public class AnuncioService {
     private final AnuncioRepository anuncioRepository;
     private final ProdutoRepository produtoRepository;
     private final SecurityUtils securityUtils;
-    // NOVO: injetado para disparar o matching assíncrono após salvar o anúncio
     private final AnuncioMatchingService anuncioMatchingService;
 
     @Transactional
-    public AnuncioDTO criar(AnuncioDTO dto) {
+    public AnuncioResponse criar(AnuncioRequest request) {
         Usuario usuario = securityUtils.getUsuarioLogado();
 
         if (usuario.getTipo() != TipoUsuario.VENDEDOR) {
             throw new IllegalArgumentException("Apenas vendedores podem criar anúncios");
         }
 
-        Produto produto = produtoRepository.findById(dto.getProdutoId())
+        Produto produto = produtoRepository.findById(request.produtoId())
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Produto não encontrado com id: " + dto.getProdutoId()));
+                        "Produto não encontrado com id: " + request.produtoId()));
 
         Anuncio anuncio = Anuncio.builder()
                 .usuario(usuario)
                 .produto(produto)
-                .quantidade(dto.getQuantidade())
-                .preco(dto.getPreco())
+                .quantidade(request.quantidade())
+                .preco(request.preco())
                 .status(StatusAnuncio.ATIVO)
                 .createdAt(LocalDateTime.now())
                 .build();
 
         Anuncio salvo = anuncioRepository.save(anuncio);
-
-        // GATILHO: dispara o matching em background sem bloquear a resposta HTTP.
-        // Como @Async roda em thread separada, o anúncio já foi comitado pelo
-        // @Transactional desta camada antes do matching começar a consultar.
         anuncioMatchingService.executarMatching(salvo);
-
-        return toDTO(salvo);
+        return toResponse(salvo);
     }
 
     @Transactional(readOnly = true)
-    public List<AnuncioDTO> listarAtivos() {
+    public List<AnuncioResponse> listarAtivos() {
         return anuncioRepository.findByStatus(StatusAnuncio.ATIVO).stream()
-                .map(this::toDTO)
+                .map(this::toResponse)
                 .toList();
     }
 
     @Transactional(readOnly = true)
-    public AnuncioDTO buscarPorId(Long id) {
+    public AnuncioResponse buscarPorId(Long id) {
         return anuncioRepository.findById(id)
-                .map(this::toDTO)
+                .map(this::toResponse)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Anúncio não encontrado com id: " + id));
     }
 
     @Transactional(readOnly = true)
-    public List<AnuncioDTO> listarMeusAnuncios() {
+    public List<AnuncioResponse> listarMeusAnuncios() {
         Usuario usuario = securityUtils.getUsuarioLogado();
         return anuncioRepository.findByUsuarioId(usuario.getId()).stream()
-                .map(this::toDTO)
+                .map(this::toResponse)
                 .toList();
     }
 
     @Transactional
-    public AnuncioDTO marcarComoVendido(Long id) {
+    public AnuncioResponse marcarComoVendido(Long id) {
         Usuario usuario = securityUtils.getUsuarioLogado();
 
         Anuncio anuncio = anuncioRepository.findById(id)
@@ -100,7 +95,7 @@ public class AnuncioService {
         }
 
         anuncio.setStatus(StatusAnuncio.VENDIDO);
-        return toDTO(anuncioRepository.save(anuncio));
+        return toResponse(anuncioRepository.save(anuncio));
     }
 
     @Transactional
@@ -118,17 +113,17 @@ public class AnuncioService {
         anuncioRepository.deleteById(id);
     }
 
-    private AnuncioDTO toDTO(Anuncio anuncio) {
-        return AnuncioDTO.builder()
-                .id(anuncio.getId())
-                .usuarioId(anuncio.getUsuario().getId())
-                .usuarioNome(anuncio.getUsuario().getNome())
-                .produtoId(anuncio.getProduto().getId())
-                .produtoNome(anuncio.getProduto().getNome())
-                .quantidade(anuncio.getQuantidade())
-                .preco(anuncio.getPreco())
-                .status(anuncio.getStatus())
-                .createdAt(anuncio.getCreatedAt())
-                .build();
+    private AnuncioResponse toResponse(Anuncio anuncio) {
+        return new AnuncioResponse(
+                anuncio.getId(),
+                anuncio.getUsuario().getId(),
+                anuncio.getUsuario().getNome(),
+                anuncio.getProduto().getId(),
+                anuncio.getProduto().getNome(),
+                anuncio.getQuantidade(),
+                anuncio.getPreco(),
+                anuncio.getStatus(),
+                anuncio.getCreatedAt()
+        );
     }
 }

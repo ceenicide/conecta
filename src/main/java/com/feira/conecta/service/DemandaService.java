@@ -13,7 +13,8 @@ import com.feira.conecta.domain.StatusDemanda;
 import com.feira.conecta.domain.StatusOferta;
 import com.feira.conecta.domain.TipoUsuario;
 import com.feira.conecta.domain.Usuario;
-import com.feira.conecta.dto.DemandaDTO;
+import com.feira.conecta.dto.DemandaRequest;
+import com.feira.conecta.dto.DemandaResponse;
 import com.feira.conecta.dto.OfertaFuturaDTO;
 import com.feira.conecta.exception.ResourceNotFoundException;
 import com.feira.conecta.repository.DemandaRepository;
@@ -33,54 +34,44 @@ public class DemandaService {
     private final SecurityUtils securityUtils;
 
     @Transactional
-    public DemandaDTO criar(DemandaDTO dto) {
+    public DemandaResponse criar(DemandaRequest request) {
         Usuario comprador = securityUtils.getUsuarioLogado();
 
         if (comprador.getTipo() != TipoUsuario.COMPRADOR) {
             throw new IllegalArgumentException("Apenas compradores podem criar demandas");
         }
 
-        Produto produto = produtoRepository.findById(dto.getProdutoId())
+        Produto produto = produtoRepository.findById(request.produtoId())
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Produto não encontrado com id: " + dto.getProdutoId()));
+                        "Produto não encontrado com id: " + request.produtoId()));
 
         Demanda demanda = Demanda.builder()
                 .comprador(comprador)
                 .produto(produto)
-                .quantidade(dto.getQuantidade())
-                .dataLimite(dto.getDataLimite())
+                .quantidade(request.quantidade())
+                .dataLimite(request.dataLimite())
                 .status(StatusDemanda.PROCURANDO)
                 .build();
 
         Demanda salva = repository.save(demanda);
         matchingService.buscarMatchesPorDemanda(salva);
 
-        return toDTO(salva);
+        return toResponse(salva);
     }
 
     @Transactional(readOnly = true)
-    public List<DemandaDTO> listarProcurando() {
+    public List<DemandaResponse> listarProcurando() {
         return repository.findByStatus(StatusDemanda.PROCURANDO).stream()
-                .map(this::toDTO).toList();
+                .map(this::toResponse).toList();
     }
 
     @Transactional(readOnly = true)
-    public List<DemandaDTO> listarMinhasDemandas() {
+    public List<DemandaResponse> listarMinhasDemandas() {
         Usuario comprador = securityUtils.getUsuarioLogado();
         return repository.findByCompradorId(comprador.getId()).stream()
-                .map(this::toDTO).toList();
+                .map(this::toResponse).toList();
     }
 
-    /**
-     * NOVO: retorna todas as ofertas futuras ABERTAS cuja dataDisponivel
-     * está dentro do prazo (dataLimite) da demanda informada.
-     *
-     * Exemplo: demanda com dataLimite = 13-05-2026 → retorna todas as
-     * ofertas com dataDisponivel <= 13-05-2026 e status ABERTA.
-     *
-     * Regra de segurança: apenas o próprio comprador pode consultar
-     * as ofertas compatíveis com sua demanda.
-     */
     @Transactional(readOnly = true)
     public List<OfertaFuturaDTO> listarOfertasCompativeis(Long demandaId) {
         Usuario comprador = securityUtils.getUsuarioLogado();
@@ -100,17 +91,17 @@ public class DemandaService {
                 .toList();
     }
 
-    private DemandaDTO toDTO(Demanda d) {
-        return DemandaDTO.builder()
-                .id(d.getId())
-                .compradorId(d.getComprador().getId())
-                .compradorNome(d.getComprador().getNome())
-                .produtoId(d.getProduto().getId())
-                .produtoNome(d.getProduto().getNome())
-                .quantidade(d.getQuantidade())
-                .dataLimite(d.getDataLimite())
-                .status(d.getStatus())
-                .build();
+    private DemandaResponse toResponse(Demanda d) {
+        return new DemandaResponse(
+                d.getId(),
+                d.getComprador().getId(),
+                d.getComprador().getNome(),
+                d.getProduto().getId(),
+                d.getProduto().getNome(),
+                d.getQuantidade(),
+                d.getDataLimite(),
+                d.getStatus()
+        );
     }
 
     private OfertaFuturaDTO toOfertaDTO(OfertaFutura o) {

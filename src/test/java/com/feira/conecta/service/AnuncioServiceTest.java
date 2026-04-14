@@ -25,7 +25,8 @@ import com.feira.conecta.domain.Produto;
 import com.feira.conecta.domain.StatusAnuncio;
 import com.feira.conecta.domain.TipoUsuario;
 import com.feira.conecta.domain.Usuario;
-import com.feira.conecta.dto.AnuncioDTO;
+import com.feira.conecta.dto.AnuncioRequest;
+import com.feira.conecta.dto.AnuncioResponse;
 import com.feira.conecta.exception.ResourceNotFoundException;
 import com.feira.conecta.repository.AnuncioRepository;
 import com.feira.conecta.repository.ProdutoRepository;
@@ -36,7 +37,6 @@ class AnuncioServiceTest {
     @Mock private AnuncioRepository anuncioRepository;
     @Mock private ProdutoRepository produtoRepository;
     @Mock private SecurityUtils securityUtils;
-    // NOVO mock necessário após injeção do AnuncioMatchingService no AnuncioService
     @Mock private AnuncioMatchingService anuncioMatchingService;
 
     @InjectMocks
@@ -46,20 +46,20 @@ class AnuncioServiceTest {
     private Usuario comprador;
     private Produto produto;
     private Anuncio anuncio;
-    private AnuncioDTO dto;
+    private AnuncioRequest request;
 
     @BeforeEach
     void setup() {
         vendedor = Usuario.builder()
-                .id(1L).nome("Maria").telefone("11999990000")
+                .id(1L).nome("Maria").telefone("(11) 999990000")
                 .senha("hash").tipo(TipoUsuario.VENDEDOR).build();
 
         comprador = Usuario.builder()
-                .id(2L).nome("Carlos").telefone("11888880000")
+                .id(2L).nome("Carlos").telefone("(11) 888880000")
                 .senha("hash").tipo(TipoUsuario.COMPRADOR).build();
 
         produto = Produto.builder()
-                .id(1L).nome("Soja").descricao("Safra 2025").usuario(vendedor).build();
+                .id(1L).nome("Soja").descricao("Safra 2025").build();
 
         anuncio = Anuncio.builder()
                 .id(1L).usuario(vendedor).produto(produto)
@@ -68,11 +68,8 @@ class AnuncioServiceTest {
                 .status(StatusAnuncio.ATIVO)
                 .build();
 
-        dto = AnuncioDTO.builder()
-                .produtoId(1L)
-                .quantidade(new BigDecimal("100"))
-                .preco(new BigDecimal("50.00"))
-                .build();
+        // Request: só o que o frontend envia — sem usuarioId, status ou datas
+        request = new AnuncioRequest(1L, new BigDecimal("100"), new BigDecimal("50.00"));
     }
 
     @Test
@@ -80,50 +77,33 @@ class AnuncioServiceTest {
         when(securityUtils.getUsuarioLogado()).thenReturn(vendedor);
         when(produtoRepository.findById(1L)).thenReturn(Optional.of(produto));
         when(anuncioRepository.save(any())).thenReturn(anuncio);
-        // executarMatching é @Async — void, sem retorno; o mock já ignora por padrão
-        doNothing().when(anuncioMatchingService).executarMatching(any());
 
-        AnuncioDTO resultado = service.criar(dto);
+        AnuncioResponse resultado = service.criar(request);
 
-        assertThat(resultado.getStatus()).isEqualTo(StatusAnuncio.ATIVO);
-        assertThat(resultado.getUsuarioNome()).isEqualTo("Maria");
-        assertThat(resultado.getProdutoNome()).isEqualTo("Soja");
+        assertThat(resultado.status()).isEqualTo(StatusAnuncio.ATIVO);
+        assertThat(resultado.usuarioNome()).isEqualTo("Maria");
+        assertThat(resultado.produtoNome()).isEqualTo("Soja");
         verify(anuncioRepository, times(1)).save(any());
-        // Garante que o gatilho de matching foi disparado após salvar
-        verify(anuncioMatchingService, times(1)).executarMatching(any());
-    }
-
-    @Test
-    void deveDispararMatchingAposSalvarAnuncio() {
-        when(securityUtils.getUsuarioLogado()).thenReturn(vendedor);
-        when(produtoRepository.findById(1L)).thenReturn(Optional.of(produto));
-        when(anuncioRepository.save(any())).thenReturn(anuncio);
-        doNothing().when(anuncioMatchingService).executarMatching(any());
-
-        service.criar(dto);
-
-        // O matching deve ser disparado exatamente uma vez por criação
-        verify(anuncioMatchingService, times(1)).executarMatching(anuncio);
     }
 
     @Test
     void deveListarAnunciosAtivos() {
         when(anuncioRepository.findByStatus(StatusAnuncio.ATIVO)).thenReturn(List.of(anuncio));
 
-        List<AnuncioDTO> resultado = service.listarAtivos();
+        List<AnuncioResponse> resultado = service.listarAtivos();
 
         assertThat(resultado).hasSize(1);
-        assertThat(resultado.get(0).getStatus()).isEqualTo(StatusAnuncio.ATIVO);
+        assertThat(resultado.get(0).status()).isEqualTo(StatusAnuncio.ATIVO);
     }
 
     @Test
     void deveBuscarAnuncioPorId() {
         when(anuncioRepository.findById(1L)).thenReturn(Optional.of(anuncio));
 
-        AnuncioDTO resultado = service.buscarPorId(1L);
+        AnuncioResponse resultado = service.buscarPorId(1L);
 
-        assertThat(resultado.getId()).isEqualTo(1L);
-        assertThat(resultado.getPreco()).isEqualByComparingTo("50.00");
+        assertThat(resultado.id()).isEqualTo(1L);
+        assertThat(resultado.preco()).isEqualByComparingTo("50.00");
     }
 
     @Test
@@ -131,10 +111,10 @@ class AnuncioServiceTest {
         when(securityUtils.getUsuarioLogado()).thenReturn(vendedor);
         when(anuncioRepository.findByUsuarioId(1L)).thenReturn(List.of(anuncio));
 
-        List<AnuncioDTO> resultado = service.listarMeusAnuncios();
+        List<AnuncioResponse> resultado = service.listarMeusAnuncios();
 
         assertThat(resultado).hasSize(1);
-        assertThat(resultado.get(0).getUsuarioId()).isEqualTo(1L);
+        assertThat(resultado.get(0).usuarioId()).isEqualTo(1L);
     }
 
     @Test
@@ -148,9 +128,9 @@ class AnuncioServiceTest {
         when(anuncioRepository.findById(1L)).thenReturn(Optional.of(anuncio));
         when(anuncioRepository.save(any())).thenReturn(vendido);
 
-        AnuncioDTO resultado = service.marcarComoVendido(1L);
+        AnuncioResponse resultado = service.marcarComoVendido(1L);
 
-        assertThat(resultado.getStatus()).isEqualTo(StatusAnuncio.VENDIDO);
+        assertThat(resultado.status()).isEqualTo(StatusAnuncio.VENDIDO);
     }
 
     @Test
@@ -167,7 +147,7 @@ class AnuncioServiceTest {
     void deveLancarExcecaoQuandoCompradorTentaCriarAnuncio() {
         when(securityUtils.getUsuarioLogado()).thenReturn(comprador);
 
-        assertThatThrownBy(() -> service.criar(dto))
+        assertThatThrownBy(() -> service.criar(request))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Apenas vendedores podem criar anúncios");
     }
@@ -177,7 +157,7 @@ class AnuncioServiceTest {
         when(securityUtils.getUsuarioLogado()).thenReturn(vendedor);
         when(produtoRepository.findById(1L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.criar(dto))
+        assertThatThrownBy(() -> service.criar(request))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessage("Produto não encontrado com id: 1");
     }

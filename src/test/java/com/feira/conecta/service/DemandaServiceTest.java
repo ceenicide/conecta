@@ -26,7 +26,8 @@ import com.feira.conecta.domain.StatusDemanda;
 import com.feira.conecta.domain.StatusOferta;
 import com.feira.conecta.domain.TipoUsuario;
 import com.feira.conecta.domain.Usuario;
-import com.feira.conecta.dto.DemandaDTO;
+import com.feira.conecta.dto.DemandaRequest;
+import com.feira.conecta.dto.DemandaResponse;
 import com.feira.conecta.dto.OfertaFuturaDTO;
 import com.feira.conecta.exception.ResourceNotFoundException;
 import com.feira.conecta.repository.DemandaRepository;
@@ -38,7 +39,6 @@ class DemandaServiceTest {
 
     @Mock private DemandaRepository repository;
     @Mock private ProdutoRepository produtoRepository;
-    // FIX: novo campo injetado no DemandaService — necessário para listarOfertasCompativeis
     @Mock private OfertaFuturaRepository ofertaFuturaRepository;
     @Mock private MatchingService matchingService;
     @Mock private SecurityUtils securityUtils;
@@ -52,7 +52,7 @@ class DemandaServiceTest {
     private Produto produto;
     private Demanda demanda;
     private OfertaFutura oferta;
-    private DemandaDTO dto;
+    private DemandaRequest request;
 
     @BeforeEach
     void setup() {
@@ -83,16 +83,9 @@ class DemandaServiceTest {
                 .dataDisponivel(LocalDate.of(2026, 4, 30))
                 .status(StatusOferta.ABERTA).build();
 
-        dto = DemandaDTO.builder()
-                .produtoId(1L)
-                .quantidade(new BigDecimal("200"))
-                .dataLimite(LocalDate.of(2026, 5, 13))
-                .build();
+        // Request: só produtoId, quantidade e dataLimite — compradorId vem do token
+        request = new DemandaRequest(1L, new BigDecimal("200"), LocalDate.of(2026, 5, 13));
     }
-
-    // ========================
-    // CRIAR
-    // ========================
 
     @Test
     void deveCriarDemandaComSucesso() {
@@ -100,11 +93,11 @@ class DemandaServiceTest {
         when(produtoRepository.findById(1L)).thenReturn(Optional.of(produto));
         when(repository.save(any())).thenReturn(demanda);
 
-        DemandaDTO resultado = service.criar(dto);
+        DemandaResponse resultado = service.criar(request);
 
-        assertThat(resultado.getStatus()).isEqualTo(StatusDemanda.PROCURANDO);
-        assertThat(resultado.getCompradorNome()).isEqualTo("Carlos");
-        assertThat(resultado.getCompradorId()).isEqualTo(2L);
+        assertThat(resultado.status()).isEqualTo(StatusDemanda.PROCURANDO);
+        assertThat(resultado.compradorNome()).isEqualTo("Carlos");
+        assertThat(resultado.compradorId()).isEqualTo(2L);
         verify(matchingService, times(1)).buscarMatchesPorDemanda(any());
     }
 
@@ -112,7 +105,7 @@ class DemandaServiceTest {
     void deveLancarExcecaoQuandoVendedorTentaCriarDemanda() {
         when(securityUtils.getUsuarioLogado()).thenReturn(vendedor);
 
-        assertThatThrownBy(() -> service.criar(dto))
+        assertThatThrownBy(() -> service.criar(request))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Apenas compradores podem criar demandas");
     }
@@ -122,23 +115,19 @@ class DemandaServiceTest {
         when(securityUtils.getUsuarioLogado()).thenReturn(comprador);
         when(produtoRepository.findById(1L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.criar(dto))
+        assertThatThrownBy(() -> service.criar(request))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessage("Produto não encontrado com id: 1");
     }
-
-    // ========================
-    // LISTAR
-    // ========================
 
     @Test
     void deveListarDemandasProcurando() {
         when(repository.findByStatus(StatusDemanda.PROCURANDO)).thenReturn(List.of(demanda));
 
-        List<DemandaDTO> resultado = service.listarProcurando();
+        List<DemandaResponse> resultado = service.listarProcurando();
 
         assertThat(resultado).hasSize(1);
-        assertThat(resultado.get(0).getStatus()).isEqualTo(StatusDemanda.PROCURANDO);
+        assertThat(resultado.get(0).status()).isEqualTo(StatusDemanda.PROCURANDO);
     }
 
     @Test
@@ -153,19 +142,14 @@ class DemandaServiceTest {
         when(securityUtils.getUsuarioLogado()).thenReturn(comprador);
         when(repository.findByCompradorId(2L)).thenReturn(List.of(demanda));
 
-        List<DemandaDTO> resultado = service.listarMinhasDemandas();
+        List<DemandaResponse> resultado = service.listarMinhasDemandas();
 
         assertThat(resultado).hasSize(1);
-        assertThat(resultado.get(0).getCompradorId()).isEqualTo(2L);
+        assertThat(resultado.get(0).compradorId()).isEqualTo(2L);
     }
-
-    // ========================
-    // LISTAR OFERTAS COMPATÍVEIS (novo método)
-    // ========================
 
     @Test
     void deveListarOfertasCompativeisComSucesso() {
-        // Demanda com prazo 13/05/2026 — oferta disponível em 30/04/2026 deve aparecer
         when(securityUtils.getUsuarioLogado()).thenReturn(comprador);
         when(repository.findById(1L)).thenReturn(Optional.of(demanda));
         when(ofertaFuturaRepository.findByStatusAndDataDisponivelLessThanEqual(
@@ -195,7 +179,6 @@ class DemandaServiceTest {
 
     @Test
     void deveLancarExcecaoQuandoOutroCompradorTentaVerOfertasCompativeis() {
-        // outroComprador não é dono da demanda — deve ser barrado
         when(securityUtils.getUsuarioLogado()).thenReturn(outroComprador);
         when(repository.findById(1L)).thenReturn(Optional.of(demanda));
 

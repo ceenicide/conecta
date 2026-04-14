@@ -20,7 +20,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
 
 import com.feira.conecta.domain.StatusAnuncio;
-import com.feira.conecta.dto.AnuncioDTO;
+import com.feira.conecta.dto.AnuncioRequest;
+import com.feira.conecta.dto.AnuncioResponse;
 import com.feira.conecta.exception.ResourceNotFoundException;
 import com.feira.conecta.service.AnuncioService;
 
@@ -32,33 +33,37 @@ class AnuncioControllerTest {
     @InjectMocks
     private AnuncioController controller;
 
-    private AnuncioDTO dto;
+    private AnuncioRequest request;
+    private AnuncioResponse response;
 
     @BeforeEach
     void setup() {
-        dto = AnuncioDTO.builder()
-                .id(1L).usuarioId(1L).usuarioNome("Maria")
-                .produtoId(1L).produtoNome("Soja")
-                .quantidade(new BigDecimal("100"))
-                .preco(new BigDecimal("50.00"))
-                .status(StatusAnuncio.ATIVO).build();
+        request = new AnuncioRequest(1L, new BigDecimal("100"), new BigDecimal("50.00"));
+
+        response = new AnuncioResponse(
+                1L, 1L, "Maria", 1L, "Soja",
+                new BigDecimal("100"), new BigDecimal("50.00"),
+                StatusAnuncio.ATIVO, null
+        );
     }
 
     @Test
-    void deveCriarAnuncioERetornar200() {
-        when(service.criar(any())).thenReturn(dto);
+    void deveCriarAnuncioERetornar201() {
+        when(service.criar(any())).thenReturn(response);
 
-        ResponseEntity<AnuncioDTO> resposta = controller.criar(dto);
+        ResponseEntity<AnuncioResponse> resposta = controller.criar(request);
 
-        assertThat(resposta.getStatusCode().value()).isEqualTo(200);
-        assertThat(resposta.getBody().getStatus()).isEqualTo(StatusAnuncio.ATIVO);
+        // POST de criação deve retornar 201 Created
+        assertThat(resposta.getStatusCode().value()).isEqualTo(201);
+        assertThat(resposta.getBody().status()).isEqualTo(StatusAnuncio.ATIVO);
+        assertThat(resposta.getBody().usuarioNome()).isEqualTo("Maria");
     }
 
     @Test
     void deveListarAnunciosAtivosERetornar200() {
-        when(service.listarAtivos()).thenReturn(List.of(dto));
+        when(service.listarAtivos()).thenReturn(List.of(response));
 
-        ResponseEntity<List<AnuncioDTO>> resposta = controller.listarAtivos();
+        ResponseEntity<List<AnuncioResponse>> resposta = controller.listarAtivos();
 
         assertThat(resposta.getStatusCode().value()).isEqualTo(200);
         assertThat(resposta.getBody()).hasSize(1);
@@ -66,19 +71,19 @@ class AnuncioControllerTest {
 
     @Test
     void deveBuscarAnuncioPorIdERetornar200() {
-        when(service.buscarPorId(1L)).thenReturn(dto);
+        when(service.buscarPorId(1L)).thenReturn(response);
 
-        ResponseEntity<AnuncioDTO> resposta = controller.buscarPorId(1L);
+        ResponseEntity<AnuncioResponse> resposta = controller.buscarPorId(1L);
 
         assertThat(resposta.getStatusCode().value()).isEqualTo(200);
-        assertThat(resposta.getBody().getProdutoNome()).isEqualTo("Soja");
+        assertThat(resposta.getBody().produtoNome()).isEqualTo("Soja");
     }
 
     @Test
     void deveListarMeusAnunciosERetornar200() {
-        when(service.listarMeusAnuncios()).thenReturn(List.of(dto));
+        when(service.listarMeusAnuncios()).thenReturn(List.of(response));
 
-        ResponseEntity<List<AnuncioDTO>> resposta = controller.listarMeusAnuncios();
+        ResponseEntity<List<AnuncioResponse>> resposta = controller.listarMeusAnuncios();
 
         assertThat(resposta.getStatusCode().value()).isEqualTo(200);
         assertThat(resposta.getBody()).hasSize(1);
@@ -86,15 +91,17 @@ class AnuncioControllerTest {
 
     @Test
     void deveMarcarAnuncioComoVendidoERetornar200() {
-        AnuncioDTO vendido = AnuncioDTO.builder()
-                .id(1L).status(StatusAnuncio.VENDIDO).build();
-
+        AnuncioResponse vendido = new AnuncioResponse(
+                1L, 1L, "Maria", 1L, "Soja",
+                new BigDecimal("100"), new BigDecimal("50.00"),
+                StatusAnuncio.VENDIDO, null
+        );
         when(service.marcarComoVendido(1L)).thenReturn(vendido);
 
-        ResponseEntity<AnuncioDTO> resposta = controller.marcarComoVendido(1L);
+        ResponseEntity<AnuncioResponse> resposta = controller.marcarComoVendido(1L);
 
         assertThat(resposta.getStatusCode().value()).isEqualTo(200);
-        assertThat(resposta.getBody().getStatus()).isEqualTo(StatusAnuncio.VENDIDO);
+        assertThat(resposta.getBody().status()).isEqualTo(StatusAnuncio.VENDIDO);
     }
 
     @Test

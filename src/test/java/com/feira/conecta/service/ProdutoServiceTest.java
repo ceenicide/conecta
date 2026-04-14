@@ -23,7 +23,8 @@ import com.feira.conecta.config.SecurityUtils;
 import com.feira.conecta.domain.Produto;
 import com.feira.conecta.domain.TipoUsuario;
 import com.feira.conecta.domain.Usuario;
-import com.feira.conecta.dto.ProdutoDTO;
+import com.feira.conecta.dto.ProdutoRequest;
+import com.feira.conecta.dto.ProdutoResponse;
 import com.feira.conecta.exception.ResourceNotFoundException;
 import com.feira.conecta.repository.ProdutoRepository;
 
@@ -31,7 +32,6 @@ import com.feira.conecta.repository.ProdutoRepository;
 class ProdutoServiceTest {
 
     @Mock private ProdutoRepository repository;
-    // FIX: SecurityUtils agora é obrigatório — ProdutoService o injeta via construtor
     @Mock private SecurityUtils securityUtils;
 
     @InjectMocks
@@ -41,7 +41,7 @@ class ProdutoServiceTest {
     private Usuario comprador;
     private Usuario outroVendedor;
     private Produto produto;
-    private ProdutoDTO dto;
+    private ProdutoRequest request;
 
     @BeforeEach
     void setup() {
@@ -59,44 +59,38 @@ class ProdutoServiceTest {
 
         produto = Produto.builder()
                 .id(1L).nome("Soja").descricao("Safra 2025")
-                .usuario(vendedor)
-                .build();
+                .usuario(vendedor).build();
 
-        dto = ProdutoDTO.builder()
-                .nome("Soja").descricao("Safra 2025")
-                .build();
+        // Request: só nome e descrição — sem id ou usuarioId
+        request = new ProdutoRequest("Soja", "Safra 2025");
     }
-
-    // ========================
-    // CRIAR
-    // ========================
 
     @Test
     void deveCriarProdutoComSucesso() {
         when(securityUtils.getUsuarioLogado()).thenReturn(vendedor);
         when(repository.save(any(Produto.class))).thenReturn(produto);
 
-        ProdutoDTO resultado = service.criar(dto);
+        ProdutoResponse resultado = service.criar(request);
 
-        assertThat(resultado.getId()).isEqualTo(1L);
-        assertThat(resultado.getNome()).isEqualTo("Soja");
-        assertThat(resultado.getUsuarioId()).isEqualTo(1L);
-        assertThat(resultado.getUsuarioNome()).isEqualTo("Maria");
+        assertThat(resultado.id()).isEqualTo(1L);
+        assertThat(resultado.nome()).isEqualTo("Soja");
+        assertThat(resultado.usuarioId()).isEqualTo(1L);
+        assertThat(resultado.usuarioNome()).isEqualTo("Maria");
         verify(repository, times(1)).save(any(Produto.class));
     }
 
     @Test
     void deveCriarProdutoSemDescricao() {
-        ProdutoDTO dtoSemDesc = ProdutoDTO.builder().nome("Feijão").build();
+        ProdutoRequest semDesc = new ProdutoRequest("Feijão", null);
         Produto salvo = Produto.builder().id(2L).nome("Feijão").usuario(vendedor).build();
 
         when(securityUtils.getUsuarioLogado()).thenReturn(vendedor);
         when(repository.save(any(Produto.class))).thenReturn(salvo);
 
-        ProdutoDTO resultado = service.criar(dtoSemDesc);
+        ProdutoResponse resultado = service.criar(semDesc);
 
-        assertThat(resultado.getId()).isEqualTo(2L);
-        assertThat(resultado.getDescricao()).isNull();
+        assertThat(resultado.id()).isEqualTo(2L);
+        assertThat(resultado.descricao()).isNull();
     }
 
     @Test
@@ -104,36 +98,31 @@ class ProdutoServiceTest {
         when(securityUtils.getUsuarioLogado()).thenReturn(vendedor);
         when(repository.save(any(Produto.class))).thenReturn(produto);
 
-        service.criar(dto);
+        service.criar(request);
 
         verify(repository, times(1)).save(any(Produto.class));
         verifyNoMoreInteractions(repository);
     }
 
-    // FIX: regra de ownership — comprador não pode criar produto
     @Test
     void deveLancarExcecaoQuandoCompradorTentaCriarProduto() {
         when(securityUtils.getUsuarioLogado()).thenReturn(comprador);
 
-        assertThatThrownBy(() -> service.criar(dto))
+        assertThatThrownBy(() -> service.criar(request))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Apenas vendedores podem cadastrar produtos");
 
         verify(repository, never()).save(any());
     }
 
-    // ========================
-    // LISTAR / BUSCAR
-    // ========================
-
     @Test
     void deveListarTodosOsProdutos() {
         when(repository.findAll()).thenReturn(List.of(produto));
 
-        List<ProdutoDTO> resultado = service.listarTodos();
+        List<ProdutoResponse> resultado = service.listarTodos();
 
         assertThat(resultado).hasSize(1);
-        assertThat(resultado.get(0).getNome()).isEqualTo("Soja");
+        assertThat(resultado.get(0).nome()).isEqualTo("Soja");
     }
 
     @Test
@@ -143,10 +132,10 @@ class ProdutoServiceTest {
 
         when(repository.findAll()).thenReturn(List.of(produto, outro));
 
-        List<ProdutoDTO> resultado = service.listarTodos();
+        List<ProdutoResponse> resultado = service.listarTodos();
 
         assertThat(resultado).hasSize(2);
-        assertThat(resultado).extracting("nome")
+        assertThat(resultado).extracting(ProdutoResponse::nome)
                 .containsExactlyInAnyOrder("Soja", "Milho");
     }
 
@@ -161,10 +150,10 @@ class ProdutoServiceTest {
     void deveBuscarProdutoPorIdComSucesso() {
         when(repository.findById(1L)).thenReturn(Optional.of(produto));
 
-        ProdutoDTO resultado = service.buscarPorId(1L);
+        ProdutoResponse resultado = service.buscarPorId(1L);
 
-        assertThat(resultado.getNome()).isEqualTo("Soja");
-        assertThat(resultado.getUsuarioNome()).isEqualTo("Maria");
+        assertThat(resultado.nome()).isEqualTo("Soja");
+        assertThat(resultado.usuarioNome()).isEqualTo("Maria");
     }
 
     @Test
@@ -176,25 +165,20 @@ class ProdutoServiceTest {
                 .hasMessage("Produto não encontrado com id: 99");
     }
 
-    // ========================
-    // ATUALIZAR
-    // ========================
-
     @Test
     void deveAtualizarProdutoComSucesso() {
-        ProdutoDTO dtoAtualizado = ProdutoDTO.builder()
-                .nome("Soja Premium").descricao("Safra 2026").build();
-        Produto atualizado = Produto.builder()
+        ProdutoRequest atualizado = new ProdutoRequest("Soja Premium", "Safra 2026");
+        Produto salvo = Produto.builder()
                 .id(1L).nome("Soja Premium").descricao("Safra 2026").usuario(vendedor).build();
 
         when(securityUtils.getUsuarioLogado()).thenReturn(vendedor);
         when(repository.findById(1L)).thenReturn(Optional.of(produto));
-        when(repository.save(any(Produto.class))).thenReturn(atualizado);
+        when(repository.save(any(Produto.class))).thenReturn(salvo);
 
-        ProdutoDTO resultado = service.atualizar(1L, dtoAtualizado);
+        ProdutoResponse resultado = service.atualizar(1L, atualizado);
 
-        assertThat(resultado.getNome()).isEqualTo("Soja Premium");
-        assertThat(resultado.getDescricao()).isEqualTo("Safra 2026");
+        assertThat(resultado.nome()).isEqualTo("Soja Premium");
+        assertThat(resultado.descricao()).isEqualTo("Safra 2026");
     }
 
     @Test
@@ -202,27 +186,22 @@ class ProdutoServiceTest {
         when(securityUtils.getUsuarioLogado()).thenReturn(vendedor);
         when(repository.findById(99L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.atualizar(99L, dto))
+        assertThatThrownBy(() -> service.atualizar(99L, request))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessage("Produto não encontrado com id: 99");
     }
 
-    // FIX: regra de ownership — outro vendedor não pode editar produto alheio
     @Test
     void deveLancarExcecaoQuandoOutroVendedorTentaEditar() {
         when(securityUtils.getUsuarioLogado()).thenReturn(outroVendedor);
         when(repository.findById(1L)).thenReturn(Optional.of(produto));
 
-        assertThatThrownBy(() -> service.atualizar(1L, dto))
+        assertThatThrownBy(() -> service.atualizar(1L, request))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Você não tem permissão para editar este produto");
 
         verify(repository, never()).save(any());
     }
-
-    // ========================
-    // DELETAR
-    // ========================
 
     @Test
     void deveDeletarProdutoComSucesso() {
@@ -243,7 +222,6 @@ class ProdutoServiceTest {
                 .hasMessage("Produto não encontrado com id: 99");
     }
 
-    // FIX: regra de ownership — outro usuário não pode deletar produto alheio
     @Test
     void deveLancarExcecaoQuandoOutroVendedorTentaDeletar() {
         when(securityUtils.getUsuarioLogado()).thenReturn(outroVendedor);
@@ -256,7 +234,6 @@ class ProdutoServiceTest {
         verify(repository, never()).deleteById(any());
     }
 
-    // FIX: regra de ownership — comprador não pode deletar produto
     @Test
     void deveLancarExcecaoQuandoCompradorTentaDeletar() {
         when(securityUtils.getUsuarioLogado()).thenReturn(comprador);
@@ -267,25 +244,18 @@ class ProdutoServiceTest {
                 .hasMessage("Você não tem permissão para deletar este produto");
     }
 
-    // ========================
-    // PROTEÇÃO DO toDTO (null safety)
-    // ========================
-
     @Test
     void deveListarProdutosLegadosSemUsuarioSemErro() {
-        // Produtos criados antes da migração podem ter usuario == null no banco.
-        // O toDTO deve proteger esse caso sem explodir em NullPointerException.
         Produto legado = Produto.builder()
                 .id(99L).nome("Milho Velho").descricao("Pre-migração")
-                .usuario(null)
-                .build();
+                .usuario(null).build();
 
         when(repository.findAll()).thenReturn(List.of(legado));
 
-        List<ProdutoDTO> resultado = service.listarTodos();
+        List<ProdutoResponse> resultado = service.listarTodos();
 
         assertThat(resultado).hasSize(1);
-        assertThat(resultado.get(0).getUsuarioId()).isNull();
-        assertThat(resultado.get(0).getUsuarioNome()).isNull();
+        assertThat(resultado.get(0).usuarioId()).isNull();
+        assertThat(resultado.get(0).usuarioNome()).isNull();
     }
 }
